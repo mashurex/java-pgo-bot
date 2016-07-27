@@ -3,6 +3,7 @@
 ## Description
 
 Pokemon GO walking/sniping bot using the [PokeGOAPI Java library](https://github.com/Grover-c13/PokeGOAPI-Java "PokeGOAPI-Java")
+
 This bot currently does the following:
 
 - Auto evolves the highest CP Pokemon
