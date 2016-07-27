@@ -1,4 +1,5 @@
-package com.ashurex.pokemon.location;
+package com.ashurex.pokemon.bot.action;
+import com.ashurex.pokemon.bot.activity.BotActivity;
 import com.google.maps.model.LatLng;
 
 /**
@@ -12,4 +13,6 @@ public interface BotWalker
     double getAltitude(LatLng point);
     void walkTo(double stepSize, final LatLng origin, final LatLng destination, final boolean doWander);
     void runTo(final LatLng origin, final LatLng destination);
+    void addPostStepActivity(BotActivity activity);
+    void performPostStepActivities();
 }

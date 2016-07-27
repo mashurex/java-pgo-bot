@@ -1,14 +1,16 @@
-package com.ashurex.pokemon;
+package com.ashurex.pokemon.bot;
 import POGOProtos.Data.Player.PlayerStatsOuterClass.PlayerStats;
-import POGOProtos.Enums.PokemonFamilyIdOuterClass.PokemonFamilyId;
 import POGOProtos.Enums.PokemonIdOuterClass;
 import POGOProtos.Map.Fort.FortDataOuterClass.FortData;
 import POGOProtos.Networking.Responses.ReleasePokemonResponseOuterClass;
-import com.ashurex.pokemon.bot.action.PokemonCatcher;
-import com.ashurex.pokemon.bot.event.*;
-import com.ashurex.pokemon.location.BotWalker;
+import com.ashurex.pokemon.BotOptions;
+import com.ashurex.pokemon.bot.action.*;
+import com.ashurex.pokemon.bot.activity.CatchNearbyPokemonActivity;
+import com.ashurex.pokemon.bot.activity.TransferPokemonActivity;
+import com.ashurex.pokemon.bot.listener.LocationListener;
+import com.ashurex.pokemon.bot.listener.LoggingLocationListener;
+import com.ashurex.pokemon.bot.listener.SimpleHeartBeatListener;
 import com.ashurex.pokemon.location.LocationUtil;
-import com.ashurex.pokemon.location.RegularBotWalker;
 import com.google.maps.GeoApiContext;
 import com.google.maps.model.LatLng;
 import com.pokegoapi.api.PokemonGo;
@@ -23,12 +25,11 @@ import com.pokegoapi.api.map.pokemon.CatchResult;
 import com.pokegoapi.api.map.pokemon.CatchablePokemon;
 import com.pokegoapi.api.map.pokemon.EvolutionResult;
 import com.pokegoapi.api.player.PlayerProfile;
-import com.pokegoapi.api.pokemon.EggPokemon;
-import com.pokegoapi.api.pokemon.HatchedEgg;
 import com.pokegoapi.api.pokemon.Pokemon;
 import com.pokegoapi.exceptions.LoginFailedException;
 import com.pokegoapi.exceptions.RemoteServerException;
 import okhttp3.OkHttpClient;
+import org.apache.commons.lang3.StringUtils;
 
 import java.io.IOException;
 import java.text.SimpleDateFormat;
@@ -40,43 +41,76 @@ import java.util.stream.Collectors;
  * Author: Mustafa Ashurex
  * Created: 7/25/16
  */
-public class PokemonBot
+public class SimplePokemonBot implements PokemonBot
 {
-    private static final double MAX_WALKING_SPEED = 2.1;
     private static final int POKESTOP_RADIUS = 1000;
 
     private final LatLng START_LOCATION;
     private final PokemonGo api;
     private final OkHttpClient httpClient;
     private final long START_EXPERIENCE;
-
-    private final int HEARTBEAT_PACE;
     private final boolean DO_EVOLUTIONS;
     private final int MIN_CP_THRESHOLD;
     private final boolean DO_TRANSFERS;
-    private final BotWalker botWalker;
+    private final boolean DEBUG_MODE;
+    private final boolean USE_WALKING_SPEED;
+    private final BotOptions BOT_OPTIONS;
+
+    private BotWalker botWalker;
 
     private double stepMeters = 4;
-    private int heartBeatCount = 0;
-
-
     private OpStatus currentOperation = OpStatus.DUH;
     private OpStatus lastOperation = OpStatus.DUH;
     private final long SPAWN_TIME_MS;
+    private int errorSampleCount = 0;
+    private long errorSampleStartMs = 0;
 
-    public enum OpStatus {
-        DUH,
-        WALKING,
-        RUNNING,
-        LOOTING,
-        CATCHING
+    public synchronized void sampleError()
+    {
+        if(errorSampleStartMs == 0)
+        {
+            errorSampleStartMs = System.currentTimeMillis();
+            errorSampleCount = 1;
+        }
+        else
+        {
+            long diff = System.currentTimeMillis() - errorSampleStartMs;
+            if(diff > 120000)
+            {
+                errorSampleCount = 1;
+                errorSampleStartMs = System.currentTimeMillis();
+            }
+            else if(errorSampleCount > 10)
+            {
+                throw new RuntimeException("Error sample count exceeded bounds, shutting down.");
+            }
+            else
+            {
+                errorSampleCount++;
+            }
+        }
     }
 
-    public PokemonBot(LatLng origin, BotOptions options)
+    protected synchronized void printConfiguration()
+    {
+        List<String> configs = new ArrayList<>();
+        configs.add("Walking Speed: " + (USE_WALKING_SPEED ? "Enabled" : "Disabled"));
+        configs.add("Evolutions: " + (DO_EVOLUTIONS ? "Enabled" : "Disabled"));
+        configs.add("Transfers: " + (DO_TRANSFERS ? "Enabled" : "Disabled"));
+        configs.add("Debug: " + (DEBUG_MODE ? "Enabled" : "Disabled"));
+        configs.add("Minimum CP Threshold: " + MIN_CP_THRESHOLD);
+        configs.add("Step size: " + getStepMeters());
+        configs.add(String.format("Starting Point: [%3.6f,%3.6f]", START_LOCATION.lat, START_LOCATION.lng));
+
+        System.out.println("Startup configuration: ");
+        System.out.println("\t" + StringUtils.join(configs, "\n\t"));
+    }
+
+    public SimplePokemonBot(BotOptions options)
     throws RemoteServerException, LoginFailedException, IOException
     {
 
-        this.START_LOCATION = origin;
+        this.START_LOCATION = options.getBotOrigin();
         this.httpClient = new OkHttpClient();
         this.api = new PokemonGo(options.getCredentialProvider(this.httpClient), this.httpClient);
 
@@ -85,22 +119,46 @@ public class PokemonBot
         this.MIN_CP_THRESHOLD = options.getMinCpThreshold();
         this.DO_EVOLUTIONS = options.isDoEvolutions();
         this.DO_TRANSFERS = options.isDoTransfers();
-        this.HEARTBEAT_PACE = options.getHeartBeatPace();
         this.START_EXPERIENCE = getCurrentExperience();
         this.SPAWN_TIME_MS = System.currentTimeMillis();
+        this.DEBUG_MODE = options.isDebugMode();
+        this.USE_WALKING_SPEED = options.isUseWalkingSpeed();
+        this.BOT_OPTIONS = options;
 
-        // TODO: Move this outside the constructor
-        CatchNearbyPokemonActivity catchNearbyPokemonActivity = new CatchNearbyPokemonActivity(this);
-        TransferPokemonActivity transferPokemonActivity = new TransferPokemonActivity(this, MIN_CP_THRESHOLD);
+        this.setCurrentLocation(options.getBotOrigin(), 0);
+    }
 
-        LocationListener locationListener = new LoggingLocationListener(this);
+    public static PokemonBot build(BotOptions options)
+        throws RemoteServerException, LoginFailedException, IOException
+    {
+        PokemonBot bot = new SimplePokemonBot(options);
 
-        SimpleHeartBeatListener heartBeatListener = new SimpleHeartBeatListener(HEARTBEAT_PACE);
+        CatchNearbyPokemonActivity catchNearbyPokemonActivity = new CatchNearbyPokemonActivity(bot);
+        TransferPokemonActivity transferPokemonActivity = new TransferPokemonActivity(bot, options.getMinCpThreshold());
+
+        LocationListener locationListener = new LoggingLocationListener(bot);
+
+        SimpleHeartBeatListener heartBeatListener = new SimpleHeartBeatListener(options.getHeartBeatPace());
         heartBeatListener.addHeartBeatActivity(catchNearbyPokemonActivity);
-        heartBeatListener.addHeartBeatActivity(transferPokemonActivity);
 
-        this.setCurrentLocation(origin, 0);
-        this.botWalker = new RegularBotWalker(origin, locationListener, heartBeatListener, buildGeoApiContext());
+        if(options.isDoTransfers())
+        {
+            heartBeatListener.addHeartBeatActivity(transferPokemonActivity);
+        }
+
+        BotWalker walker = new RegularBotWalker(options.getBotOrigin(), locationListener, heartBeatListener,
+            buildGeoApiContext(), options);
+
+        walker.addPostStepActivity(catchNearbyPokemonActivity);
+
+        if(options.isDoTransfers())
+        {
+            walker.addPostStepActivity(transferPokemonActivity);
+        }
+
+        bot.setWalker(walker);
+
+        return bot;
     }
 
     /**
@@ -168,6 +226,7 @@ public class PokemonBot
         {
             System.err.println("Error trying to snipe!");
             ex.printStackTrace();
+            sampleError();
         }
 
         return new ArrayList<>();
@@ -230,6 +289,7 @@ public class PokemonBot
         {
             System.err.println("Error spinning Pokestop: " + ex.getMessage());
             ex.printStackTrace();
+            sampleError();
         }
 
         return false;
@@ -256,6 +316,7 @@ public class PokemonBot
         {
             System.err.println("Couldn't get experience due to error.");
             ex.printStackTrace();
+            sampleError();
         }
         return -1;
     }
@@ -266,7 +327,7 @@ public class PokemonBot
         return new SimpleDateFormat("mm:ss:SSS").format(new Date(diffMs));
     }
 
-    protected final GeoApiContext buildGeoApiContext()
+    protected static GeoApiContext buildGeoApiContext()
     {
         return new GeoApiContext()
             // TODO: Get from configuration
@@ -284,6 +345,7 @@ public class PokemonBot
     {
         try
         {
+            printConfiguration();
             boolean doStop = false;
             while (!doStop)
             {
@@ -298,23 +360,31 @@ public class PokemonBot
 
                 for (Pokestop p : pokestops)
                 {
+                    System.out.println(String.format("Walking to %s %3.2fm away...",
+                        p.getDetails().getName(),
+                        LocationUtil.getDistance(getCurrentLocation(), new LatLng(p.getLatitude(), p.getLongitude()))));
+
                     botWalker.walkTo(getStepMeters(), getCurrentLocation(),
                         new LatLng(p.getLatitude(), p.getLongitude()), true);
 
                     catchNearbyPokemon();
                     lootNearbyPokestops(false);
+
                     if(DO_TRANSFERS){ doTransfers(); }
                     if(DO_EVOLUTIONS){ doEvolutions(); }
+
                     try
                     {
-                        Thread.sleep(500);
+                        Thread.sleep(500 + getRandom().longValue());
                     }
                     catch (InterruptedException ex)
                     {
-                        doStop = true;
-                        System.out.println("Stopping wander...");
+                        System.out.println("Stopping wander due to interruption...");
+                        break;
                     }
                 }
+
+                doStop = true;
             }
         }
         catch (Exception e)
@@ -324,6 +394,11 @@ public class PokemonBot
         }
 
         System.out.println("Done wandering.");
+    }
+
+    protected static Double getRandom()
+    {
+        return Math.random() * 750;
     }
 
     /**
@@ -347,8 +422,6 @@ public class PokemonBot
                              .collect(Collectors.toList());
     }
 
-
-
     private PlayerStats getStats()
     {
         PlayerProfile profile = getApi().getPlayerProfile();
@@ -369,98 +442,34 @@ public class PokemonBot
     }
 
     /**
-     *
-     * @return The first available egg from the inventory.
-     */
-    public EggPokemon getAvailableEgg()
-    {
-        Set<EggPokemon> eggs = getInventory().getHatchery().getEggs();
-        if (eggs.size() > 0)
-        {
-
-            Optional<EggPokemon> result = eggs.stream().filter(p -> !p.isIncubate())
-                                              .sorted((EggPokemon a, EggPokemon b) ->
-                                                  Double.compare(a.getEggKmWalkedTarget(), b.getEggKmWalkedTarget()))
-                                              .findFirst();
-            if (result.isPresent()) { return result.get(); }
-        }
-        return null;
-    }
-
-    /**
      * Lists out hatched eggs and puts eggs in incubators that are not in use.
      */
     public void manageEggsAndIncubators()
     {
         try
         {
-            List<HatchedEgg> hatchedEggs = getInventory().getHatchery().queryHatchedEggs();
-            if (hatchedEggs != null && hatchedEggs.size() > 0)
+            EggManager.queryHatchedEggs(getInventory().getHatchery()).forEach(e ->
             {
-                hatchedEggs.forEach(e ->
-                {
-                    System.out.println(e.getId() + " egg hatched: " + e.toString());
-                });
-            }
-        }
-        catch (Exception ex)
-        {
-            System.err.println(ex.getMessage());
-            ex.printStackTrace();
-        }
+                System.out.println(e.getId() + " egg hatched: " + e.toString());
+            });
 
-        List<EggIncubator> availableIncubators = new ArrayList<>();
-        getInventory().getIncubators().forEach(i ->
-        {
-            if (!i.isInUse())
+            final List<EggIncubator> filled = EggManager.fillIncubators(getInventory());
+            if (filled.size() > 0)
             {
-                EggPokemon egg = getAvailableEgg();
-                if (egg != null)
-                {
-                    try
-                    {
-                        i.hatchEgg(egg);
-                    }
-                    catch (Exception ex)
-                    {
-                        System.err.println("Could not incubate new egg: " + ex.getMessage());
-                        ex.printStackTrace();
-                        availableIncubators.add(i);
-                    }
-                }
-                else { availableIncubators.add(i); }
-
+                System.out.println("Filled " + filled.size() + " incubators with eggs.");
             }
-            else
+
+            getInventory().getIncubators().stream().filter(EggIncubator::isInUse).forEach(i ->
             {
                 System.out.println(String.format("Incubator %s (%d) %2.1f / %2.1fkm walked",
                     i.getId(), i.getUsesRemaining(), i.getKmWalked(), i.getKmTarget()));
-            }
-        });
-
-        if (availableIncubators.size() > 0)
-        {
-            System.out.println(availableIncubators.size() + " incubators available.");
+            });
         }
-    }
-
-    public Optional<EvolutionResult> evolve(Pokemon pokemon)
-    {
-        try
-        {
-            EvolutionResult r = pokemon.evolve();
-            if (r.isSuccessful())
-            {
-                System.out.println(String.format("Evolved [%d] %s to %s",
-                    r.getExpAwarded(), pokemon.getPokemonId(), r.getEvolvedPokemon().getPokemonId()));
-            }
-            return Optional.of(r);
-        }
-        catch (Exception ex)
+        catch(Exception ex)
         {
             System.err.println(ex.getMessage());
             ex.printStackTrace();
-            return Optional.empty();
+            sampleError();
         }
     }
 
@@ -479,42 +488,17 @@ public class PokemonBot
         final Inventories inventories = getApi().getInventories();
         final CandyJar candyJar = inventories.getCandyjar();
 
-        List<Pokemon> pokemons = inventories.getPokebank()
+        final List<Pokemon> pokemons = inventories.getPokebank()
                                             .getPokemons()
                                             .stream()
                                             .sorted((Pokemon a, Pokemon b) ->
                                                 Integer.compare(b.getCp(), a.getCp()))
                                             .collect(Collectors.toList());
 
-        List<EvolutionResult> evolutionResults = new ArrayList<>();
-        pokemons.forEach(p ->
-        {
-            boolean doEvolve = false;
-            try
-            {
-                if (!p.getPokemonFamily().equals(PokemonFamilyId.FAMILY_ODDISH))
-                {
-                    int candies = candyJar.getCandies(p.getPokemonFamily());
-                    Integer candiesToEvolve = p.getCandiesToEvolve();
-                    doEvolve = (candies >= candiesToEvolve);
-                }
-            }
-            catch (Exception ignore)
-            {
-                // System.out.println("Error getting evolution data for " + p.getPokemonId());
-                // ex.printStackTrace();
-            }
-
-            if (doEvolve)
-            {
-                Optional<EvolutionResult> r = evolve(p);
-                if (r.isPresent()) { evolutionResults.add(r.get()); }
-            }
-        });
-
-        return evolutionResults;
+        return PokemonEvolver.evolvePokemon(pokemons, candyJar);
     }
 
+    @Override
     public Inventories getInventory()
     {
         return getApi().getInventories();
@@ -531,6 +515,7 @@ public class PokemonBot
         return this.lastOperation;
     }
 
+    @Override
     public final Map getMap()
     {
         return getApi().getMap();
@@ -551,9 +536,6 @@ public class PokemonBot
         return PokemonCatcher.catchPokemon(catchablePokemon);
     }
 
-
-
-
     public final Collection<Pokestop> getPokestops()
     {
         try
@@ -564,6 +546,7 @@ public class PokemonBot
         {
             System.err.println(ex.getMessage());
             ex.printStackTrace();
+            sampleError();
         }
 
         return new ArrayList<>();
@@ -579,6 +562,7 @@ public class PokemonBot
         {
             System.err.println(ex.getMessage());
             ex.printStackTrace();
+            sampleError();
         }
         return new ArrayList<>();
     }
@@ -622,6 +606,7 @@ public class PokemonBot
         {
             System.err.println(ex.getMessage());
             ex.printStackTrace();
+            sampleError();
         }
         return new ArrayList<>();
     }
@@ -634,23 +619,20 @@ public class PokemonBot
      */
     public synchronized List<PokestopLootResult> lootNearbyPokestops(boolean walkToStops)
     {
-        final List<PokestopLootResult> results = new ArrayList<>();
+
         final LatLng origin = getCurrentLocation();
 
-        getNearbyPokestops().forEach(p ->
+        List<Pokestop> pokestops = getNearbyPokestops();
+        final List<PokestopLootResult> results = PokestopLooter.lootPokestops(pokestops);
+
+        if(!walkToStops){ return results; }
+
+        pokestops.stream().filter(p -> p.canLoot(true)).forEach(p ->
         {
-            if (p.canLoot())
-            {
-                Optional<PokestopLootResult> r = lootPokestop(p);
-                if (r.isPresent()) { results.add(r.get()); }
-            }
-            else if (walkToStops && !p.inRange() && p.canLoot(true))
-            {
-                System.out.println("Wandering to nearby Pokestop...");
-                botWalker.walkTo(getStepMeters(), getCurrentLocation(),
-                    new LatLng(p.getLatitude(), p.getLongitude()), false);
-                lootPokestop(p);
-            }
+            System.out.println("Wandering to nearby Pokestop...");
+            botWalker.walkTo(getStepMeters(), getCurrentLocation(),
+                new LatLng(p.getLatitude(), p.getLongitude()), false);
+            results.add(lootPokestop(p));
         });
 
         botWalker.runTo(getCurrentLocation(), origin);
@@ -663,29 +645,10 @@ public class PokemonBot
      * @param pokestop The Pokestop to loot.
      * @return {@link Optional} will be empty if errors occurred.
      */
-    public Optional<PokestopLootResult> lootPokestop(Pokestop pokestop)
+    public PokestopLootResult lootPokestop(Pokestop pokestop)
     {
-        try
-        {
-            updateOpStatus(OpStatus.LOOTING);
-            System.out.println(String.format("Attempting to get loot from Pokestop at [%f,%f]",
-                pokestop.getLongitude(), pokestop.getLatitude()));
-
-            PokestopLootResult r = pokestop.loot();
-
-            if (r.wasSuccessful())
-            { System.out.println("    » Looted Pokestop"); }
-            else
-            { System.out.println("    × Could not loot Pokestop."); }
-
-            return Optional.of(r);
-        }
-        catch (Exception e)
-        {
-            System.err.println(e.getMessage());
-            e.printStackTrace();
-            return Optional.empty();
-        }
+        updateOpStatus(OpStatus.LOOTING);
+        return PokestopLooter.lootPokestop(pokestop);
     }
 
     public final LatLng getStartLocation()
@@ -693,17 +656,17 @@ public class PokemonBot
         return START_LOCATION;
     }
 
-    public final PokemonGo getApi()
+    public synchronized final PokemonGo getApi()
     {
         return api;
     }
 
-    protected final OkHttpClient getHttpClient()
+    protected synchronized final OkHttpClient getHttpClient()
     {
         return httpClient;
     }
 
-    public final double getStepMeters()
+    public synchronized final double getStepMeters()
     {
         return stepMeters;
     }
@@ -760,7 +723,18 @@ public class PokemonBot
         }
         catch (InterruptedException ignore)
         {
+            sampleError();
             return false;
         }
+    }
+
+    public synchronized BotWalker getWalker()
+    {
+        return botWalker;
+    }
+
+    public synchronized void setWalker(BotWalker botWalker)
+    {
+        this.botWalker = botWalker;
     }
 }

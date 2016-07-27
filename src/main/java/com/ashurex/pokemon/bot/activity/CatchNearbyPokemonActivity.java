@@ -1,5 +1,5 @@
-package com.ashurex.pokemon.bot.event;
-import com.ashurex.pokemon.PokemonBot;
+package com.ashurex.pokemon.bot.activity;
+import com.ashurex.pokemon.bot.PokemonBot;
 import com.ashurex.pokemon.bot.action.PokemonCatcher;
 import com.pokegoapi.api.map.pokemon.CatchResult;
 

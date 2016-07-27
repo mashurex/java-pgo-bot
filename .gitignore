@@ -4,3 +4,6 @@ build
 output-points.log
 gtoken.txt
 coords.txt
+pokebot.log
+lib
+coords.log
