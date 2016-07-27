@@ -3,6 +3,8 @@ import POGOProtos.Enums.PokemonFamilyIdOuterClass.PokemonFamilyId;
 import POGOProtos.Networking.Responses.ReleasePokemonResponseOuterClass.ReleasePokemonResponse.Result;
 import com.ashurex.pokemon.bot.PokemonBot;
 import com.pokegoapi.api.pokemon.Pokemon;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -15,6 +17,7 @@ public class TransferPokemonActivity implements BotActivity
 {
     private final PokemonBot bot;
     private final int MIN_CP_THRESHOLD;
+    private static final Logger LOG = LoggerFactory.getLogger(TransferPokemonActivity.class);
 
     // TODO: Make this configurable/better list
     private static final List<PokemonFamilyId> PROTECTED_FAMILIES = new ArrayList<PokemonFamilyId>(){{
@@ -53,14 +56,12 @@ public class TransferPokemonActivity implements BotActivity
                     try
                     {
                         Result r = p.transferPokemon();
-                        System.out.println(String.format("Transferred %d %s: %s", p.getCp(), p.getPokemonId(), r));
+                        LOG.info(String.format("Transferred %d %s: %s", p.getCp(), p.getPokemonId(), r));
                         transferred.add(r);
                     }
                     catch (Exception ex)
                     {
-                        // TODO:
-                        System.err.println("Error transferring " + p.getPokemonId());
-                        ex.printStackTrace();
+                        LOG.error("Error transferring " + p.getPokemonId(), ex);
                     }
                 }
             });

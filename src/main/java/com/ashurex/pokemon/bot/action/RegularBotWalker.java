@@ -8,6 +8,8 @@ import com.ashurex.pokemon.location.LocationUtil;
 import com.google.maps.DirectionsApi;
 import com.google.maps.GeoApiContext;
 import com.google.maps.model.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -21,6 +23,8 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 public class RegularBotWalker implements BotWalker
 {
+    private static final Logger LOG = LoggerFactory.getLogger(RegularBotWalker.class);
+    
     private static final double MAX_WALKING_SPEED = 2.1;
     private final double RUN_STEP_SIZE;
 
@@ -90,11 +94,11 @@ public class RegularBotWalker implements BotWalker
         LatLng[] steps = getStepsToDestination(origin, destination, stepSize);
         if (steps == null)
         {
-            System.err.println("No steps returned!");
+            LOG.error("No steps returned!");
             setCurrentLocation(destination);
             return;
         }
-        else { System.out.println(steps.length + " steps to destination."); }
+        else { LOG.info(steps.length + " steps to destination."); }
 
         for (LatLng step : steps)
         {
@@ -111,13 +115,13 @@ public class RegularBotWalker implements BotWalker
                         long timeout = getTimeoutForDistance(distance);
                         if(timeout > 0)
                         {
-                            System.out.println("Slowing for " + timeout + "ms");
+                            LOG.info("Slowing for " + timeout + "ms");
                             Thread.sleep(timeout);
                         }
                     }
                     catch (InterruptedException ex)
                     {
-                        System.err.println("Slowdown interrupted..." + ex.getMessage());
+                        LOG.error("Slowdown interrupted..." + ex.getMessage());
                     }
                 }
             }
@@ -130,7 +134,7 @@ public class RegularBotWalker implements BotWalker
                 && !Double.isNaN(speed) && !Double.isInfinite(speed)
                 && (Double.compare(speed, MAX_WALKING_SPEED) > 0))
             {
-                System.out.println(String.format("Walking too fast (%2.2f m/s), slowing down.", speed));
+                LOG.info(String.format("Walking too fast (%2.2f m/s), slowing down.", speed));
                 longSleep();
             }
 
@@ -154,7 +158,7 @@ public class RegularBotWalker implements BotWalker
         LatLng[] steps = getStepsToDestination(origin, destination, RUN_STEP_SIZE);
         if(steps == null)
         {
-            System.err.println("Cannot run, no steps returned!");
+            LOG.error("Cannot run, no steps returned!");
             setCurrentLocation(destination);
             return;
         }
@@ -167,7 +171,7 @@ public class RegularBotWalker implements BotWalker
         }
 
 
-        System.out.println(String.format("Running to [%3.4f,%3.4f] from [%3.4f,%3.4f] in %d steps",
+        LOG.info(String.format("Running to [%3.4f,%3.4f] from [%3.4f,%3.4f] in %d steps",
             destination.lat, destination.lng, origin.lat, origin.lng, steps.length));
 
 
@@ -236,9 +240,7 @@ public class RegularBotWalker implements BotWalker
         }
         catch (Exception ex)
         {
-            // TODO:
-            System.err.println("Error retrieving directions from API!: " + ex.getMessage());
-            ex.printStackTrace();
+            LOG.error("Error retrieving directions from API!: " + ex.getMessage(), ex);
         }
 
         return null;
@@ -283,8 +285,7 @@ public class RegularBotWalker implements BotWalker
         }
         catch (Exception ex)
         {
-            System.err.println("Could not set location via API!");
-            ex.printStackTrace();
+            LOG.error("Could not set location via API!", ex);
         }
 
         return 0;
@@ -331,7 +332,7 @@ public class RegularBotWalker implements BotWalker
     {
         if((!Double.isInfinite(speed) && !Double.isNaN(speed) && speed > 0.01))
         {
-            System.out.println(String.format("Traveling %2.2fm at %3.2f m/s from [%3.9f,%3.9f] to [%3.9f,%3.9f]",
+            LOG.info(String.format("Traveling %2.2fm at %3.2f m/s from [%3.9f,%3.9f] to [%3.9f,%3.9f]",
                 speed, LocationUtil.getDistance(start, end), start.lat, start.lng, end.lat, end.lng));
         }
     }

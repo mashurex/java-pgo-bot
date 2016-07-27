@@ -4,6 +4,8 @@ import POGOProtos.Networking.Responses.EncounterResponseOuterClass.EncounterResp
 import com.pokegoapi.api.map.pokemon.CatchResult;
 import com.pokegoapi.api.map.pokemon.CatchablePokemon;
 import com.pokegoapi.api.map.pokemon.EncounterResult;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -14,6 +16,8 @@ import java.util.List;
  */
 public class PokemonCatcher
 {
+    private static final Logger LOG = LoggerFactory.getLogger(PokemonCatcher.class);
+
     public static List<CatchResult> catchPokemon(List<CatchablePokemon> pokemonList)
     {
         List<CatchResult> results = new ArrayList<>(pokemonList.size());
@@ -34,9 +38,7 @@ public class PokemonCatcher
         }
         catch (Exception ex)
         {
-            // TODO:
-            System.err.println(ex.getMessage());
-            ex.printStackTrace();
+            LOG.error(ex.getMessage(), ex);
         }
         return new EncounterResult(EncounterResponse.getDefaultInstance());
     }
@@ -58,7 +60,7 @@ public class PokemonCatcher
 
             while (status == CatchStatus.CATCH_MISSED)
             {
-                System.out.println("Missed at " + pokemon.getPokemonId());
+                LOG.info("Missed at " + pokemon.getPokemonId());
                 catchResult = pokemon.catchPokemonWithRazzBerry();
                 status = catchResult.getStatus();
             }
@@ -66,10 +68,10 @@ public class PokemonCatcher
             switch (catchResult.getStatus())
             {
                 case CATCH_SUCCESS:
-                    System.out.println(String.format("Caught %s", pokemon.getPokemonId()));
+                    LOG.info(String.format("Caught %s", pokemon.getPokemonId()));
                     break;
                 default:
-                    System.out.println(String.format("%s got away!", pokemon.getPokemonId()));
+                    LOG.info(String.format("%s got away! [%s]", pokemon.getPokemonId(), catchResult.getStatus()));
                     break;
             }
 
@@ -77,9 +79,7 @@ public class PokemonCatcher
         }
         catch (Exception ex)
         {
-            // TODO: Replace w/ logging
-            System.err.println(ex.getMessage());
-            ex.printStackTrace();
+            LOG.error(ex.getMessage(), ex);
         }
 
         return new CatchResult();

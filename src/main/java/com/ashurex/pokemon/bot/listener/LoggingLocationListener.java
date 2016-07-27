@@ -3,8 +3,8 @@ import com.ashurex.pokemon.bot.PokemonBot;
 import com.ashurex.pokemon.logging.LocationLogger;
 import com.ashurex.pokemon.logging.SimpleLocationLogger;
 import com.google.maps.model.LatLng;
-
-import java.io.File;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Author: Mustafa Ashurex
@@ -15,13 +15,14 @@ public class LoggingLocationListener implements LocationListener, AutoCloseable
     private final PokemonBot bot;
     private LocationLogger locationLogger;
     private boolean isShutdown = false;
+    private final static Logger LOG = LoggerFactory.getLogger(LoggingLocationListener.class);
 
     public LoggingLocationListener(final PokemonBot bot)
     {
         this.bot = bot;
         try
         {
-            this.locationLogger = new SimpleLocationLogger(new File("./coords.txt"));
+            this.locationLogger = new SimpleLocationLogger();
         }
         catch(Exception ex)
         {
@@ -51,8 +52,8 @@ public class LoggingLocationListener implements LocationListener, AutoCloseable
         }
         catch (Exception ex)
         {
-            System.err.println("Error writing location to log.");
-            ex.printStackTrace();
+            LOG.error("Error writing location to log.");
+            LOG.error(ex.getMessage());
         }
     }
 
