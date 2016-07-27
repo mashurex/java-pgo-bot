@@ -1,8 +1,10 @@
-package com.ashurex.pokemon.location;
+package com.ashurex.pokemon.bot.action;
+import com.ashurex.pokemon.BotOptions;
 import com.ashurex.pokemon.BotStep;
-import com.ashurex.pokemon.bot.event.BotActivity;
-import com.ashurex.pokemon.bot.event.HeartBeatListener;
-import com.ashurex.pokemon.bot.event.LocationListener;
+import com.ashurex.pokemon.bot.activity.BotActivity;
+import com.ashurex.pokemon.bot.listener.HeartBeatListener;
+import com.ashurex.pokemon.bot.listener.LocationListener;
+import com.ashurex.pokemon.location.LocationUtil;
 import com.google.maps.DirectionsApi;
 import com.google.maps.GeoApiContext;
 import com.google.maps.model.*;
@@ -10,6 +12,8 @@ import com.google.maps.model.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Author: Mustafa Ashurex
@@ -18,15 +22,18 @@ import java.util.Random;
 public class RegularBotWalker implements BotWalker
 {
     private static final double MAX_WALKING_SPEED = 2.1;
+    private final double RUN_STEP_SIZE;
+
+    private final boolean USE_WALKING_SPEED;
     private final GeoApiContext geoApiContext;
-    private final boolean USE_WALKING_SPEED = false;
     private final HeartBeatListener heartBeatListener;
     private final List<BotActivity> postStepActivities = new ArrayList<>();
     private final LocationListener locationListener;
 
-    private LatLng currentLocation;
-    private long lastLocationMs = 0;
+    private AtomicReference<LatLng> currentLocation;
+    private AtomicLong lastLocationMs = new AtomicLong(0);
     private double lastAltitude = 2;
+    private final BotOptions options;
 
     // TODO: Remove parent bot requirement and use events
     // TODO: Manage map API cache updates
@@ -35,24 +42,39 @@ public class RegularBotWalker implements BotWalker
         final LatLng origin,
         final LocationListener locationListener,
         final HeartBeatListener heartBeatListener,
-        final GeoApiContext geoApiContext)
+        final GeoApiContext geoApiContext,
+        final BotOptions options)
     {
         this.geoApiContext = geoApiContext;
         this.heartBeatListener = heartBeatListener;
         this.locationListener = locationListener;
-        this.currentLocation = origin;
+        this.currentLocation = new AtomicReference<>(origin);
         this.setLastLocationMs(System.currentTimeMillis());
+        this.options = options;
+        this.USE_WALKING_SPEED = options.isUseWalkingSpeed();
+        this.RUN_STEP_SIZE = options.getStepMeters() * 5;
     }
 
+    public BotOptions getOptions()
+    {
+        return options;
+    }
 
+    @Override
     public synchronized void addPostStepActivity(BotActivity activity)
     {
         this.postStepActivities.add(activity);
     }
 
-    public void performPostStepActivities()
+    @Override
+    public synchronized void performPostStepActivities()
     {
         postStepActivities.forEach(BotActivity::performActivity);
+    }
+
+    protected synchronized void performHeartBeat()
+    {
+        heartBeatListener.heartBeat();
     }
 
     /**
@@ -76,31 +98,33 @@ public class RegularBotWalker implements BotWalker
 
         for (LatLng step : steps)
         {
-//            if (USE_WALKING_SPEED)
-//            {
-//                LatLng cur = getCurrentLocation();
-//                double distance = LocationUtil.getDistance(cur, step);
-//                if(Double.compare(distance, MAX_WALKING_SPEED) > 0)
-//                {
-//                    try
-//                    {
-//                        long timeout = getTimeoutForDistance(distance);
-//                        if(timeout > 0)
-//                        {
-//                            System.out.println("Slowing for " + timeout + "ms");
-//                            Thread.sleep(timeout);
-//                        }
-//                    }
-//                    catch (InterruptedException ex)
-//                    {
-//                        System.err.println("Slowdown interrupted..." + ex.getMessage());
-//                    }
-//                }
-//            }
+            // TODO: Better speed/timeout regulation.
+
+            if (USE_WALKING_SPEED)
+            {
+                LatLng cur = getCurrentLocation();
+                double distance = LocationUtil.getDistance(cur, step);
+                if(Double.compare(distance, MAX_WALKING_SPEED) > 0)
+                {
+                    try
+                    {
+                        long timeout = getTimeoutForDistance(distance);
+                        if(timeout > 0)
+                        {
+                            System.out.println("Slowing for " + timeout + "ms");
+                            Thread.sleep(timeout);
+                        }
+                    }
+                    catch (InterruptedException ex)
+                    {
+                        System.err.println("Slowdown interrupted..." + ex.getMessage());
+                    }
+                }
+            }
 
             double speed = setCurrentLocation(step);
 
-            heartBeatListener.heartBeat();
+            performHeartBeat();
 
             if (USE_WALKING_SPEED
                 && !Double.isNaN(speed) && !Double.isInfinite(speed)
@@ -127,8 +151,7 @@ public class RegularBotWalker implements BotWalker
      */
     public synchronized void runTo(final LatLng origin, final LatLng destination)
     {
-        double stepSize = 70;
-        LatLng[] steps = getStepsToDestination(origin, destination, stepSize);
+        LatLng[] steps = getStepsToDestination(origin, destination, RUN_STEP_SIZE);
         if(steps == null)
         {
             System.err.println("Cannot run, no steps returned!");
@@ -138,7 +161,7 @@ public class RegularBotWalker implements BotWalker
         else if(steps.length == 1)
         {
             setCurrentLocation(destination);
-            heartBeatListener.heartBeat();
+            performHeartBeat();
             performPostStepActivities();
             return;
         }
@@ -157,8 +180,11 @@ public class RegularBotWalker implements BotWalker
             performPostStepActivities();
         }
 
-        sleep();
-        heartBeatListener.heartBeat();
+        longSleep();
+
+        // TODO: Add randomized delays?
+
+        performHeartBeat();
         performPostStepActivities();
     }
 
@@ -171,6 +197,7 @@ public class RegularBotWalker implements BotWalker
      */
     public final LatLng[] getStepsToDestination(final LatLng origin, final LatLng destination, final double stepMeters)
     {
+        // Don't try to get directions if origin and destination are the same
         if(Double.compare(origin.lat, destination.lat) == 0 &&
             Double.compare(origin.lng, destination.lng) == 0)
         {
@@ -187,7 +214,7 @@ public class RegularBotWalker implements BotWalker
 
             if (result.routes == null || result.routes.length == 0)
             {
-                throw new Exception("Could not find any routes to destination!");
+                throw new RuntimeException("Could not find any routes to destination!");
             }
 
             final DirectionsRoute route = result.routes[0];
@@ -209,6 +236,7 @@ public class RegularBotWalker implements BotWalker
         }
         catch (Exception ex)
         {
+            // TODO:
             System.err.println("Error retrieving directions from API!: " + ex.getMessage());
             ex.printStackTrace();
         }
@@ -217,68 +245,9 @@ public class RegularBotWalker implements BotWalker
     }
 
     /**
-     * Calculates how long to wait to cover the specified distance to maintain walking speed.
-     * @param distance
-     * @return
-     */
-    protected static long getTimeoutForDistance(double distance)
-    {
-        if(Double.isInfinite(distance) || Double.isNaN(distance) || (Double.compare(distance, 1) < 1)){ return 0; }
-
-        Double ms = ((distance / MAX_WALKING_SPEED) * 1000) + 100;
-        return ms.longValue();
-    }
-
-    /**
-     * Sleeps for a random amount of time, at least 1s.
-     * @return {@code false} if the thread was interrupted.
-     */
-    private boolean longSleep()
-    {
-        return sleep(new Double((Math.random() * 2000)).intValue() + 1000);
-    }
-
-    /**
-     * Sleeps for a random amount of time, up to 1s.
-     * @return {@code false} if the thread was interrupted.
-     */
-    private boolean sleep()
-    {
-        return sleep(new Double((Math.random() * 1000)).intValue());
-    }
-
-    /**
-     * Sleeps for the amount of time provided.
-     * @param wait The number of milliseconds to sleep for.
-     * @return {@code false} if the thread was interrupted.
-     */
-    private boolean sleep(long wait)
-    {
-        try
-        {
-            Thread.sleep(wait);
-            return true;
-        }
-        catch (InterruptedException ignore)
-        {
-            return false;
-        }
-    }
-
-    public synchronized LatLng getCurrentLocation()
-    {
-        return currentLocation;
-    }
-
-    protected synchronized GeoApiContext getGeoApiContext()
-    {
-        return geoApiContext;
-    }
-
-    /**
      * Set the current location of the user to this {@link LatLng}.
      * @param newLocation The new location to set the user's position to.
-     * @return The speed in meters per second the user traveled from the last position.
+     * @return The speed in meters per second the user traveled from the last position update.
      */
     public final synchronized double setCurrentLocation(LatLng newLocation)
     {
@@ -286,6 +255,7 @@ public class RegularBotWalker implements BotWalker
         {
             double speed = 0;
             boolean doUpdate = true;
+            LatLng currentLocation = getCurrentLocation();
             if(currentLocation != null)
             {
                 if(Double.compare(newLocation.lat, currentLocation.lat) == 0 &&
@@ -293,20 +263,21 @@ public class RegularBotWalker implements BotWalker
                 {
                     doUpdate = false;
                 }
-
                 speed = getCurrentSpeed(newLocation);
                 printSpeed(speed, getCurrentLocation(), newLocation);
             }
 
+            // Add some jitter
+            newLocation.lat += getSmallRandom();
+            newLocation.lng += getSmallRandom();
+
             if(doUpdate)
             {
-                newLocation.lat += getSmallRandom();
-                newLocation.lng += getSmallRandom();
                 locationListener.updateCurrentLocation(newLocation, getAltitude(newLocation) + getSmallRandom());
             }
 
             setLastLocationMs(System.currentTimeMillis());
-            this.currentLocation = newLocation;
+            setCurrentLocationValue(newLocation);
 
             return speed;
         }
@@ -318,15 +289,6 @@ public class RegularBotWalker implements BotWalker
 
         return 0;
     }
-
-
-    /*
-
-    */
-
-    public final synchronized long getLastLocationMs() { return lastLocationMs; }
-
-    protected final synchronized void setLastLocationMs(long ms) { this.lastLocationMs = ms; }
 
     /**
      * Returns the current speed in meters per second from the user's current location to the parameter.
@@ -344,7 +306,7 @@ public class RegularBotWalker implements BotWalker
 
             if(distance.isInfinite() || distance.isNaN() || Double.compare(distance, 1) < 0){ return 0; }
 
-            return getSpeed(distance, (current - lastMs));
+            return metersPerSecond(distance, (current - lastMs));
         }
 
         return 0;
@@ -357,7 +319,7 @@ public class RegularBotWalker implements BotWalker
      * @param ms
      * @return
      */
-    public static Double getSpeed(double distance, long ms)
+    public static Double metersPerSecond(double distance, long ms)
     {
         Double val = distance / (ms / 1000);
         if(val.isInfinite() || val.isNaN()){ return (double)0; }
@@ -401,4 +363,72 @@ public class RegularBotWalker implements BotWalker
 
         return alt;
     }
+
+    /**
+     * Calculates how long to wait to cover the specified distance to maintain walking speed.
+     * @param distance
+     * @return
+     */
+    protected static long getTimeoutForDistance(double distance)
+    {
+        if(Double.isInfinite(distance) || Double.isNaN(distance) || (Double.compare(distance, 1) < 1)){ return 0; }
+
+        Double ms = ((distance / MAX_WALKING_SPEED) * 1000) + 100;
+        return ms.longValue();
+    }
+
+    /**
+     * Sleeps for a random amount of time, at least 1s.
+     * @return {@code false} if the thread was interrupted.
+     */
+    protected boolean longSleep()
+    {
+        return sleep(new Double((Math.random() * 2000)).intValue() + 1000);
+    }
+
+    /**
+     * Sleeps for a random amount of time, up to 1s.
+     * @return {@code false} if the thread was interrupted.
+     */
+    protected boolean sleep()
+    {
+        return sleep(new Double((Math.random() * 1000)).intValue());
+    }
+
+    /**
+     * Sleeps for the amount of time provided.
+     * @param wait The number of milliseconds to sleep for.
+     * @return {@code false} if the thread was interrupted.
+     */
+    protected synchronized boolean sleep(long wait)
+    {
+        try
+        {
+            Thread.sleep(wait);
+            return true;
+        }
+        catch (InterruptedException ignore)
+        {
+            return false;
+        }
+    }
+
+    public synchronized LatLng getCurrentLocation()
+    {
+        return currentLocation.get();
+    }
+
+    public synchronized void setCurrentLocationValue(LatLng point)
+    {
+        currentLocation.set(point);
+    }
+
+    protected synchronized GeoApiContext getGeoApiContext()
+    {
+        return geoApiContext;
+    }
+
+    public final synchronized long getLastLocationMs() { return lastLocationMs.get(); }
+
+    protected final synchronized void setLastLocationMs(long ms) { lastLocationMs.set(ms); }
 }

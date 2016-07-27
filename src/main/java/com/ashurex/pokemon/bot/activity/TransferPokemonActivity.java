@@ -1,7 +1,7 @@
-package com.ashurex.pokemon.bot.event;
-import POGOProtos.Enums.PokemonFamilyIdOuterClass;
+package com.ashurex.pokemon.bot.activity;
+import POGOProtos.Enums.PokemonFamilyIdOuterClass.PokemonFamilyId;
 import POGOProtos.Networking.Responses.ReleasePokemonResponseOuterClass.ReleasePokemonResponse.Result;
-import com.ashurex.pokemon.PokemonBot;
+import com.ashurex.pokemon.bot.PokemonBot;
 import com.pokegoapi.api.pokemon.Pokemon;
 
 import java.util.ArrayList;
@@ -16,10 +16,24 @@ public class TransferPokemonActivity implements BotActivity
     private final PokemonBot bot;
     private final int MIN_CP_THRESHOLD;
 
+    // TODO: Make this configurable/better list
+    private static final List<PokemonFamilyId> PROTECTED_FAMILIES = new ArrayList<PokemonFamilyId>(){{
+        add(PokemonFamilyId.FAMILY_EEVEE);
+        add(PokemonFamilyId.FAMILY_NIDORAN_FEMALE);
+        add(PokemonFamilyId.FAMILY_NIDORAN_FEMALE);
+        add(PokemonFamilyId.FAMILY_PIKACHU);
+        add(PokemonFamilyId.FAMILY_ODDISH);
+    }};
+
     public TransferPokemonActivity(final PokemonBot bot, final int minimumCP)
     {
         this.bot = bot;
         this.MIN_CP_THRESHOLD = minimumCP;
+    }
+
+    public boolean isProtected(PokemonFamilyId family)
+    {
+        return PROTECTED_FAMILIES.contains(family);
     }
 
     /**
@@ -34,11 +48,7 @@ public class TransferPokemonActivity implements BotActivity
         {
             pokemons.forEach(p ->
             {
-                if (!p.isFavorite() &&
-                    p.getCp() < MIN_CP_THRESHOLD &&
-                    !p.getPokemonFamily().equals(PokemonFamilyIdOuterClass.PokemonFamilyId.FAMILY_NIDORAN_MALE) &&
-                    !p.getPokemonFamily().equals(PokemonFamilyIdOuterClass.PokemonFamilyId.FAMILY_NIDORAN_FEMALE) &&
-                    !p.getPokemonFamily().equals(PokemonFamilyIdOuterClass.PokemonFamilyId.FAMILY_PIKACHU))
+                if (!p.isFavorite() && p.getCp() < MIN_CP_THRESHOLD && !isProtected(p.getPokemonFamily()))
                 {
                     try
                     {

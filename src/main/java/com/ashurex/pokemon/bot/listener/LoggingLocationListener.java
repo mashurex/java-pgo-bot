@@ -1,5 +1,5 @@
-package com.ashurex.pokemon.bot.event;
-import com.ashurex.pokemon.PokemonBot;
+package com.ashurex.pokemon.bot.listener;
+import com.ashurex.pokemon.bot.PokemonBot;
 import com.ashurex.pokemon.logging.LocationLogger;
 import com.ashurex.pokemon.logging.SimpleLocationLogger;
 import com.google.maps.model.LatLng;
@@ -10,10 +10,11 @@ import java.io.File;
  * Author: Mustafa Ashurex
  * Created: 7/26/16
  */
-public class LoggingLocationListener implements LocationListener
+public class LoggingLocationListener implements LocationListener, AutoCloseable
 {
     private final PokemonBot bot;
     private LocationLogger locationLogger;
+    private boolean isShutdown = false;
 
     public LoggingLocationListener(final PokemonBot bot)
     {
@@ -31,8 +32,15 @@ public class LoggingLocationListener implements LocationListener
     @Override
     public synchronized void updateCurrentLocation(LatLng point, double altitude)
     {
-        this.bot.setCurrentLocation(point, altitude);
+        if(isShutdown){ throw new RuntimeException("Listener already closed!"); }
+
         logLocation(point);
+        getBot().setCurrentLocation(point, altitude);
+    }
+
+    protected final synchronized PokemonBot getBot()
+    {
+        return bot;
     }
 
     protected final synchronized void logLocation(LatLng loc)
@@ -46,5 +54,12 @@ public class LoggingLocationListener implements LocationListener
             System.err.println("Error writing location to log.");
             ex.printStackTrace();
         }
+    }
+
+    @Override
+    public synchronized void close() throws Exception
+    {
+        this.isShutdown = true;
+        this.locationLogger.close();
     }
 }

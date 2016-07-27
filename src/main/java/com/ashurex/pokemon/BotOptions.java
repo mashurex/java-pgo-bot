@@ -1,11 +1,13 @@
 package com.ashurex.pokemon;
 import com.ashurex.pokemon.auth.SimpleGoogleLoginOAuthCompleteListener;
+import com.google.maps.model.LatLng;
 import com.pokegoapi.auth.CredentialProvider;
 import com.pokegoapi.auth.GoogleCredentialProvider;
 import com.pokegoapi.auth.PtcCredentialProvider;
 import com.pokegoapi.exceptions.LoginFailedException;
 import com.pokegoapi.exceptions.RemoteServerException;
 import okhttp3.OkHttpClient;
+import org.apache.commons.cli.CommandLine;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.File;
@@ -26,12 +28,13 @@ public class BotOptions
     private boolean useWalkingSpeed = true;
     private boolean doTransfers = true;
     private int minCpThreshold = 70;
-    private CredentialProvider credentialProvider;
-    private final File tokenFile;
-    private String username;
-    private String password;
+    private File tokenFile = null;
+    private String username = null;
+    private String password = null;
     private LoginProvider loginProvider = LoginProvider.PTC;
-    private String refreshToken;
+    private String refreshToken = null;
+    private boolean debugMode = false;
+    private LatLng botOrigin = null;
 
     public enum LoginProvider
     {
@@ -41,20 +44,77 @@ public class BotOptions
 
     public BotOptions()
     {
-        this.tokenFile = null;
+
     }
 
-    public BotOptions(LoginProvider loginProvider, File tokenFile)
+    public BotOptions(File tokenFile)
     {
-        this.loginProvider = loginProvider;
+        this.loginProvider = LoginProvider.GOOGLE;
         this.tokenFile = tokenFile;
     }
 
-    public String getRefreshToken()
+    public static BotOptions fromCommandLine(CommandLine args)
+    {
+        BotOptions options = new BotOptions();
+        if(args.hasOption("s"))
+        {
+            options.setStepMeters(Double.valueOf(args.getOptionValue("s")));
+        }
+
+        if(args.hasOption("c"))
+        {
+            options.setMinCpThreshold(Integer.valueOf(args.getOptionValue("c")));
+        }
+
+        if(args.hasOption("b"))
+        {
+            options.setHeartBeatPace(Integer.valueOf(args.getOptionValue("b")));
+        }
+
+        options.setDoTransfers(args.hasOption("t"));
+        options.setDoEvolutions(args.hasOption("e"));
+        options.setDebugMode(args.hasOption("x"));
+        options.setUseWalkingSpeed(args.hasOption("w"));
+
+        if(args.hasOption("lat") && args.hasOption("lng"))
+        {
+            double lat = Double.valueOf(args.getOptionValue("lat"));
+            double lng = Double.valueOf(args.getOptionValue("lng"));
+            options.setBotOrigin(new LatLng(lat, lng));
+        }
+
+        options.setLoginProvider(LoginProvider.valueOf(args.getOptionValue("l", LoginProvider.PTC.toString()).toUpperCase()));
+        options.setUsername(args.getOptionValue("u"));
+        options.setPassword(args.getOptionValue("p"));
+
+        return options;
+    }
+
+    public boolean isValid()
+    {
+        return (getBotOrigin() != null) && hasValidLoginSettings();
+    }
+
+    public boolean hasValidLoginSettings()
+    {
+        if(getLoginProvider() == null){ return false; }
+        else if(getLoginProvider() == LoginProvider.PTC)
+        {
+            return !(StringUtils.isEmpty(getUsername()) || StringUtils.isEmpty(getPassword()));
+        }
+        else if(getLoginProvider() == LoginProvider.GOOGLE)
+        {
+            return getTokenFile() != null;
+        }
+
+        return true;
+    }
+
+    public synchronized String getRefreshToken()
     {
         try
         {
-            if (tokenFile != null && tokenFile.canRead() && StringUtils.isEmpty(refreshToken))
+            if (getTokenFile() != null && getTokenFile().canRead() && StringUtils.isEmpty(refreshToken))
             {
                 this.refreshToken = getTokenString(tokenFile);
             }
@@ -77,16 +137,16 @@ public class BotOptions
         return null;
     }
 
-    public CredentialProvider getCredentialProvider(OkHttpClient okHttpClient) throws LoginFailedException,
-        RemoteServerException
+    public CredentialProvider getCredentialProvider(OkHttpClient okHttpClient)
+    throws LoginFailedException, RemoteServerException
     {
-        if(loginProvider == LoginProvider.GOOGLE)
+        if(getLoginProvider() == LoginProvider.GOOGLE)
         {
             String refreshToken = getRefreshToken();
             if(StringUtils.isEmpty(refreshToken))
             {
                 return new GoogleCredentialProvider(okHttpClient,
-                    new SimpleGoogleLoginOAuthCompleteListener(tokenFile));
+                    new SimpleGoogleLoginOAuthCompleteListener(getTokenFile()));
             }
             else
             {
@@ -95,7 +155,7 @@ public class BotOptions
         }
         else
         {
-            return new PtcCredentialProvider(okHttpClient, username, password);
+            return new PtcCredentialProvider(okHttpClient, getUsername(), getPassword());
         }
     }
 
@@ -197,5 +257,30 @@ public class BotOptions
     public void setRefreshToken(String refreshToken)
     {
         this.refreshToken = refreshToken;
+    }
+
+    public void setTokenFile(File tokenFile)
+    {
+        this.tokenFile = tokenFile;
+    }
+
+    public boolean isDebugMode()
+    {
+        return debugMode;
+    }
+
+    public void setDebugMode(boolean debugMode)
+    {
+        this.debugMode = debugMode;
+    }
+
+    public LatLng getBotOrigin()
+    {
+        return botOrigin;
+    }
+
+    public void setBotOrigin(LatLng botOrigin)
+    {
+        this.botOrigin = botOrigin;
     }
 }

@@ -1,4 +1,6 @@
-package com.ashurex.pokemon.bot.event;
+package com.ashurex.pokemon.bot.listener;
+import com.ashurex.pokemon.bot.activity.BotActivity;
+
 import java.util.List;
 
 /**
