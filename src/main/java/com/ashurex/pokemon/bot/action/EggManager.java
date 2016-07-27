@@ -1,10 +1,12 @@
 package com.ashurex.pokemon.bot.action;
-import POGOProtos.Networking.Responses.UseItemEggIncubatorResponseOuterClass.UseItemEggIncubatorResponse.*;
+import POGOProtos.Networking.Responses.UseItemEggIncubatorResponseOuterClass.UseItemEggIncubatorResponse.Result;
 import com.pokegoapi.api.inventory.EggIncubator;
 import com.pokegoapi.api.inventory.Hatchery;
 import com.pokegoapi.api.inventory.Inventories;
 import com.pokegoapi.api.pokemon.EggPokemon;
 import com.pokegoapi.api.pokemon.HatchedEgg;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -18,6 +20,7 @@ import java.util.stream.Collectors;
  */
 public class EggManager
 {
+    private static final Logger LOG = LoggerFactory.getLogger(EggManager.class);
     public static List<HatchedEgg> queryHatchedEggs(Hatchery hatchery)
     {
         try
@@ -27,7 +30,7 @@ public class EggManager
             {
                 hatchedEggs.forEach(e ->
                 {
-                    System.out.println(e.getId() + " egg hatched: " + e.toString());
+                    LOG.info(e.getId() + " egg hatched: " + e.toString());
                 });
             }
 
@@ -35,9 +38,7 @@ public class EggManager
         }
         catch(Exception ex)
         {
-            // TODO: Log
-            System.err.println(ex.getMessage());
-            ex.printStackTrace();
+            LOG.error(ex.getMessage(), ex);
         }
 
         return new ArrayList<>();
@@ -92,9 +93,7 @@ public class EggManager
         }
         catch (Exception ex)
         {
-            // TODO:
-            System.err.println("Could not incubate new egg: " + ex.getMessage());
-            ex.printStackTrace();
+            LOG.error(ex.getMessage(), ex);
         }
 
         return null;

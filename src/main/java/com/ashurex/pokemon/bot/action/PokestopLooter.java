@@ -2,6 +2,8 @@ package com.ashurex.pokemon.bot.action;
 import POGOProtos.Networking.Responses.FortSearchResponseOuterClass;
 import com.pokegoapi.api.map.fort.Pokestop;
 import com.pokegoapi.api.map.fort.PokestopLootResult;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -12,6 +14,8 @@ import java.util.List;
  */
 public class PokestopLooter
 {
+    private static final Logger LOG = LoggerFactory.getLogger(PokestopLooter.class);
+
     public static List<PokestopLootResult> lootPokestops(final List<Pokestop> pokestops)
     {
         final List<PokestopLootResult> results = new ArrayList<>(pokestops.size());
@@ -30,20 +34,17 @@ public class PokestopLooter
             if(pokestop.canLoot())
             {
                 PokestopLootResult r = pokestop.loot();
-                // TODO: System.out
-                System.out.println(String.format("Attempting to get loot from Pokestop at [%f,%f]",
+                LOG.info(String.format("Attempting to get loot from Pokestop at [%f,%f]",
                     pokestop.getLongitude(), pokestop.getLatitude()));
-                if (r.wasSuccessful()) { System.out.println("    » Looted Pokestop"); }
-                else { System.out.println("    × Could not loot Pokestop."); }
+                if (r.wasSuccessful()) { LOG.info("    » Looted Pokestop"); }
+                else { LOG.warn("    × Could not loot Pokestop."); }
 
                 return r;
             }
         }
         catch(Exception ex)
         {
-            // TODO: Logging
-            System.err.println(ex.getMessage());
-            ex.printStackTrace();
+            LOG.error(ex.getMessage(), ex);
         }
 
         return new PokestopLootResult(FortSearchResponseOuterClass.FortSearchResponse.getDefaultInstance());

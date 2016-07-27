@@ -1,6 +1,8 @@
 package com.ashurex.pokemon.bot.listener;
 import com.ashurex.pokemon.bot.activity.BotActivity;
 import org.apache.commons.lang3.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -17,6 +19,7 @@ public class SimpleHeartBeatListener implements HeartBeatListener
     private List<BotActivity> activities = new ArrayList<>();
     private final int HEARTBEAT_PACE;
     private final AtomicLong lastPulse = new AtomicLong(0);
+    private static final Logger LOG = LoggerFactory.getLogger(SimpleHeartBeatListener.class);
 
     public SimpleHeartBeatListener(int pace)
     {
@@ -31,8 +34,7 @@ public class SimpleHeartBeatListener implements HeartBeatListener
         {
             updateLastPulse();
             setHeartBeatCount(1);
-            // TODO: Logging/System.out
-            System.out.println(StringUtils.repeat("♥", " ", HEARTBEAT_PACE));
+            LOG.debug(StringUtils.repeat("♥", " ", HEARTBEAT_PACE));
             getHeartbeatActivities().forEach(BotActivity::performActivity);
         }
     }

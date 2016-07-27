@@ -1,7 +1,10 @@
 package com.ashurex.pokemon;
+import POGOProtos.Enums.PokemonIdOuterClass;
 import com.ashurex.pokemon.bot.PokemonBot;
 import com.ashurex.pokemon.bot.SimplePokemonBot;
+import com.google.maps.model.LatLng;
 import org.apache.commons.cli.*;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -18,8 +21,13 @@ public class BotMain
     {
 
         // Sample start args
-        // -lat "45.518502" -lng "-122.682156" -l PTC -u ashurexm -p "XXXXXX" -x -c 200 -e -t
+
+        // Basic wandering w/ PTC and Google Login
+        // -lat "45.518502" -lng "-122.682156" -l PTC -u "username" -p "XXXXXX" -x -c 200 -e -t
         // -lat "45.518502" -lng "-122.682156" -l GOOGLE -x -c 200 -e -t
+
+        // Snipe Eevee w/ Google login
+        // -lat "45.518502" -lng "-122.682156" -l GOOGLE -snipe -dest-lat "45.474577292898935" -dest-lng "-122.64651775360109" -pokemon "EEVEE"
 
         Options options = new Options();
         Option latOpt = new Option(null, "lat", true, "Latitude");
@@ -41,6 +49,11 @@ public class BotMain
         Option evolveOpt = new Option("e", "Auto evolve Pokemon when possible");
         Option transferOpt = new Option("t", "Auto transfer Pokemon under the minimum CP threshold");
 
+        Option snipeMode = new Option(null, "snipe", false, "Perform a snipe to target location");
+        Option extraLat = new Option(null, "dest-lat", true, "Destination latitude");
+        Option extraLng = new Option(null, "dest-lng", true, "Destination longitude");
+        Option pokemonOpt = new Option(null, "pokemon", true, "Target Pokemon family name");
+
         options.addOption(latOpt);
         options.addOption(lngOpt);
         options.addOption(debugOpt);
@@ -53,25 +66,35 @@ public class BotMain
         options.addOption(paceOpt);
         options.addOption(evolveOpt);
         options.addOption(transferOpt);
+        options.addOption(snipeMode);
+        options.addOption(extraLat);
+        options.addOption(extraLng);
+        options.addOption(pokemonOpt);
 
         CommandLineParser parser = new DefaultParser();
-        final CommandLine line;
-        try {
-            line = parser.parse( options, args);
+        final CommandLine commandLine;
+        try
+        {
+            commandLine = parser.parse( options, args);
+
+            if(commandLine.hasOption("snipe") && !(commandLine.hasOption("dest-lat") && commandLine.hasOption("dest-lng")))
+            {
+                throw new ParseException("Destination latitude and longitude are required for snipe mode.");
+            }
         }
         catch( ParseException exp )
         {
-            // oops, something went wrong
-            System.err.println( "Parsing failed.  Reason: " + exp.getMessage() );
+            System.err.println(exp.getMessage());
             HelpFormatter formatter = new HelpFormatter();
             formatter.printHelp("pokebot", options);
             return;
         }
 
-        final BotOptions botOptions = BotOptions.fromCommandLine(line);
+        final BotOptions botOptions = BotOptions.fromCommandLine(commandLine);
 
         if(botOptions.getLoginProvider() == BotOptions.LoginProvider.GOOGLE)
         {
+            // TODO: Regenerate token file when login errors occur
             botOptions.setTokenFile(new File("./gtoken.txt"));
         }
 
@@ -84,17 +107,47 @@ public class BotMain
             if(!botOptions.isValid()){ throw new IllegalArgumentException("Missing or invalid required options"); }
 
             final PokemonBot bot = SimplePokemonBot.build(botOptions);
-            bot.wander();
+
+            if(commandLine.hasOption("snipe"))
+            {
+                LatLng destination = new LatLng(Double.valueOf(commandLine.getOptionValue("dest-lat")),
+                    Double.valueOf(commandLine.getOptionValue("dest-lng")));
+
+                final String toBeSniped = commandLine.getOptionValue("pokemon");
+
+                PokemonIdOuterClass.PokemonId target;
+                if(StringUtils.isEmpty(toBeSniped)){ target = null; }
+                else
+                {
+                    try
+                    {
+                        target = PokemonIdOuterClass.PokemonId.valueOf(toBeSniped);
+                    }
+                    catch(IllegalArgumentException ex)
+                    {
+                        throw new IllegalArgumentException("Unknown Pokemon family: " + toBeSniped);
+                    }
+                }
+
+                bot.snipe(botOptions.getBotOrigin(), destination, target);
+
+                System.out.println("Done sniping: " + (target != null ? target : " everything"));
+            }
+            else
+            {
+                bot.wander();
+                System.out.println("Done wandering.");
+            }
         }
         catch(IllegalArgumentException ex)
         {
-            LOG.debug(ex.getMessage(), ex);
+            LOG.info(ex.getMessage(), ex);
+            System.err.println(ex.getMessage());
         }
         catch(Exception ex)
         {
             LOG.error(ex.getMessage(), ex);
+            System.err.println(ex.getMessage());
         }
-
-        System.out.println("Done.");
     }
 }

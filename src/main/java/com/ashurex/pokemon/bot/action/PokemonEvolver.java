@@ -2,6 +2,8 @@ package com.ashurex.pokemon.bot.action;
 import com.pokegoapi.api.inventory.CandyJar;
 import com.pokegoapi.api.map.pokemon.EvolutionResult;
 import com.pokegoapi.api.pokemon.Pokemon;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -12,6 +14,7 @@ import java.util.List;
  */
 public class PokemonEvolver
 {
+    private static final Logger LOG = LoggerFactory.getLogger(PokemonEvolver.class);
     public static List<EvolutionResult> evolvePokemon(List<Pokemon> pokemons, CandyJar candyJar)
     {
         List<EvolutionResult> results = new ArrayList<>();
@@ -25,9 +28,9 @@ public class PokemonEvolver
                 Integer candiesToEvolve = p.getCandiesToEvolve();
                 doEvolve = (candies >= candiesToEvolve);
             }
-            catch (Exception ignore)
+            catch (Exception ex)
             {
-                // DEBUG LOG
+                LOG.debug(ex.getMessage(), ex);
             }
 
             if(doEvolve)
@@ -47,16 +50,13 @@ public class PokemonEvolver
             EvolutionResult r = pokemon.evolve();
             if (r.isSuccessful())
             {
-                // TODO: System.out
-                System.out.println(String.format("Evolved [%d] %s to %s",
+                LOG.info(String.format("Evolved [%d] %s to %s",
                     r.getExpAwarded(), pokemon.getPokemonId(), r.getEvolvedPokemon().getPokemonId()));
             }
         }
         catch (Exception ex)
         {
-            // TODO: Log
-            System.err.println(ex.getMessage());
-            ex.printStackTrace();
+            LOG.error(ex.getMessage(), ex);
         }
 
         return null;

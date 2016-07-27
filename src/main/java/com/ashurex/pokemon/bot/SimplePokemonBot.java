@@ -30,6 +30,8 @@ import com.pokegoapi.exceptions.LoginFailedException;
 import com.pokegoapi.exceptions.RemoteServerException;
 import okhttp3.OkHttpClient;
 import org.apache.commons.lang3.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.text.SimpleDateFormat;
@@ -43,6 +45,7 @@ import java.util.stream.Collectors;
  */
 public class SimplePokemonBot implements PokemonBot
 {
+    private static final Logger LOG = LoggerFactory.getLogger(SimplePokemonBot.class);
     private static final int POKESTOP_RADIUS = 1000;
 
     private final LatLng START_LOCATION;
@@ -102,8 +105,8 @@ public class SimplePokemonBot implements PokemonBot
         configs.add("Step size: " + getStepMeters());
         configs.add(String.format("Starting Point: [%3.6f,%3.6f]", START_LOCATION.lat, START_LOCATION.lng));
 
-        System.out.println("Startup configuration: ");
-        System.out.println("\t" + StringUtils.join(configs, "\n\t"));
+        LOG.info("Startup configuration: ");
+        LOG.info("\t" + StringUtils.join(configs, "\n\t"));
     }
 
     public SimplePokemonBot(BotOptions options)
@@ -192,29 +195,29 @@ public class SimplePokemonBot implements PokemonBot
 
             if(filtered.size() < 1 && pokemonId != null)
             {
-                System.out.println("Couldn't find" + pokemonId + ", will try again");
+                LOG.info("Couldn't find " + pokemonId + ", will try again");
                 longSleep();
                 filtered = map.getCatchablePokemon().stream()
                               .filter(p -> p.getPokemonId().equals(pokemonId))
                               .collect(Collectors.toList());
             }
 
-            if(filtered.size() < 1){ return new ArrayList<>(); }
+            if(filtered.size() < 1){ LOG.info("Still couldn't find " + pokemonId + ", giving up..."); return new ArrayList<>(); }
 
             List<CatchResult> catchResults = new ArrayList<>();
             for (CatchablePokemon p : filtered)
             {
                 setCurrentLocation(destination, 0);
                 p.encounterPokemon();
-                System.out.println("Warping back to origin...");
+                LOG.info("Warping back to origin...");
                 setCurrentLocation(origin, 0);
                 CatchResult r = p.catchPokemon();
                 if(!r.isFailed())
                 {
-                    System.out.println("Caught " + p.getPokemonId());
+                    LOG.info("Caught " + p.getPokemonId());
                     catchResults.add(r);
                 }
-                else { System.err.println("Couldn't catch " + p.getPokemonId() + ": " + r.getStatus()); }
+                else { LOG.warn("Couldn't catch " + p.getPokemonId() + ": " + r.getStatus()); }
             }
 
             map.setUseCache(true);
@@ -224,8 +227,8 @@ public class SimplePokemonBot implements PokemonBot
         }
         catch(Exception ex)
         {
-            System.err.println("Error trying to snipe!");
-            ex.printStackTrace();
+            LOG.error("Error trying to snipe!");
+            LOG.error(ex.getMessage(), ex);
             sampleError();
         }
 
@@ -244,7 +247,7 @@ public class SimplePokemonBot implements PokemonBot
         Optional<Pokestop> nearest = getNearestPokestop();
         if(!nearest.isPresent())
         {
-            System.err.println("Cannot find a nearby Pokestop!");
+            LOG.warn("Cannot find a nearby Pokestop!");
             return false;
         }
 
@@ -265,19 +268,19 @@ public class SimplePokemonBot implements PokemonBot
 
                 if(d != null)
                 {
-                    System.out.println(String.format("Attempting to spin on %s at [%3.5f,%3.5f]",
+                    LOG.info(String.format("Attempting to spin on %s at [%3.5f,%3.5f]",
                         d.getName(), pokestop.getLatitude(), pokestop.getLongitude()));
-                } else { System.err.println("Get fort details didn't work!"); }
+                } else { LOG.error("Get fort details didn't work!"); }
 
                 PokestopLootResult r = pokestop.loot();
                 if(r.wasSuccessful() && r.getItemsAwarded().size() > 0)
                 {
-                    System.out.println(i + ": " + r.getItemsAwarded().size() + " items awarded for " + r.getExperience() + " exp");
+                    LOG.info(i + ": " + r.getItemsAwarded().size() + " items awarded for " + r.getExperience() + " exp");
                     return true;
                 }
                 else
                 {
-                    System.out.println(i + ": was not successful");
+                    LOG.info(i + ": was not successful");
                 }
                 sleep();
             }
@@ -287,8 +290,8 @@ public class SimplePokemonBot implements PokemonBot
         }
         catch(LoginFailedException | RemoteServerException ex)
         {
-            System.err.println("Error spinning Pokestop: " + ex.getMessage());
-            ex.printStackTrace();
+            LOG.error("Error spinning Pokestop: " + ex.getMessage());
+            LOG.error(ex.getMessage(), ex);
             sampleError();
         }
 
@@ -314,8 +317,8 @@ public class SimplePokemonBot implements PokemonBot
         }
         catch(Exception ex)
         {
-            System.err.println("Couldn't get experience due to error.");
-            ex.printStackTrace();
+            LOG.error("Couldn't get experience due to error.");
+            LOG.error(ex.getMessage(), ex);
             sampleError();
         }
         return -1;
@@ -346,11 +349,12 @@ public class SimplePokemonBot implements PokemonBot
         try
         {
             printConfiguration();
+            getStats();
             boolean doStop = false;
             while (!doStop)
             {
                 List<Pokestop> pokestops = getNearbyPokestops();
-                System.out.println("Found " + pokestops.size() + " pokestops nearby");
+                LOG.info("Found " + pokestops.size() + " pokestops nearby");
                 if (pokestops.size() < 1) { break; }
 
                 catchNearbyPokemon();
@@ -360,7 +364,8 @@ public class SimplePokemonBot implements PokemonBot
 
                 for (Pokestop p : pokestops)
                 {
-                    System.out.println(String.format("Walking to %s %3.2fm away...",
+                    getStats();
+                    LOG.info(String.format("Walking to %s %3.2fm away...",
                         p.getDetails().getName(),
                         LocationUtil.getDistance(getCurrentLocation(), new LatLng(p.getLatitude(), p.getLongitude()))));
 
@@ -379,7 +384,7 @@ public class SimplePokemonBot implements PokemonBot
                     }
                     catch (InterruptedException ex)
                     {
-                        System.out.println("Stopping wander due to interruption...");
+                        LOG.warn("Stopping wander due to interruption...");
                         break;
                     }
                 }
@@ -389,11 +394,11 @@ public class SimplePokemonBot implements PokemonBot
         }
         catch (Exception e)
         {
-            System.err.println(e.getMessage());
+            LOG.error(e.getMessage());
             e.printStackTrace();
         }
 
-        System.out.println("Done wandering.");
+        LOG.info("Done wandering.");
     }
 
     protected static Double getRandom()
@@ -431,12 +436,12 @@ public class SimplePokemonBot implements PokemonBot
         int hatched = stats.getEggsHatched();
         int evos = stats.getEvolutions();
 
-        System.out.println(String.format("Level %d (%d) %d evolutions, %d eggs hatched",
+        LOG.info(String.format("Level %d (%d) %d evolutions, %d eggs hatched",
             level, experience, evos, hatched));
 
         if(Long.compare(experience, START_EXPERIENCE) > 0)
         {
-            System.out.println("Gained " + (experience - START_EXPERIENCE) + " experience in " + getRuntime());
+            LOG.info("Gained " + (experience - START_EXPERIENCE) + " experience in " + getRuntime());
         }
         return stats;
     }
@@ -450,25 +455,25 @@ public class SimplePokemonBot implements PokemonBot
         {
             EggManager.queryHatchedEggs(getInventory().getHatchery()).forEach(e ->
             {
-                System.out.println(e.getId() + " egg hatched: " + e.toString());
+                LOG.info(e.getId() + " egg hatched: " + e.toString());
             });
 
             final List<EggIncubator> filled = EggManager.fillIncubators(getInventory());
             if (filled.size() > 0)
             {
-                System.out.println("Filled " + filled.size() + " incubators with eggs.");
+                LOG.info("Filled " + filled.size() + " incubators with eggs.");
             }
 
             getInventory().getIncubators().stream().filter(EggIncubator::isInUse).forEach(i ->
             {
-                System.out.println(String.format("Incubator %s (%d) %2.1f / %2.1fkm walked",
+                LOG.info(String.format("Incubator %s (%d) %2.1f / %2.1fkm walked",
                     i.getId(), i.getUsesRemaining(), i.getKmWalked(), i.getKmTarget()));
             });
         }
         catch(Exception ex)
         {
-            System.err.println(ex.getMessage());
-            ex.printStackTrace();
+            LOG.error(ex.getMessage());
+            LOG.error(ex.getMessage(), ex);
             sampleError();
         }
     }
@@ -510,7 +515,7 @@ public class SimplePokemonBot implements PokemonBot
         this.currentOperation = status;
 
 //        if(lastOperation != currentOperation)
-//            System.out.println("Switching from " + this.lastOperation + " to " + this.currentOperation);
+//            LOG.info("Switching from " + this.lastOperation + " to " + this.currentOperation);
 
         return this.lastOperation;
     }
@@ -531,7 +536,7 @@ public class SimplePokemonBot implements PokemonBot
         List<CatchablePokemon> catchablePokemon = getCatchablePokemon();
         if (catchablePokemon.size() == 0) { return new ArrayList<>(); }
 
-        System.out.println("Found " + catchablePokemon.size() + " nearby pokemon to try and catch.");
+        LOG.info("Found " + catchablePokemon.size() + " nearby pokemon to try and catch.");
 
         return PokemonCatcher.catchPokemon(catchablePokemon);
     }
@@ -544,8 +549,8 @@ public class SimplePokemonBot implements PokemonBot
         }
         catch (Exception ex)
         {
-            System.err.println(ex.getMessage());
-            ex.printStackTrace();
+            LOG.error(ex.getMessage());
+            LOG.error(ex.getMessage(), ex);
             sampleError();
         }
 
@@ -560,8 +565,8 @@ public class SimplePokemonBot implements PokemonBot
         }
         catch (Exception ex)
         {
-            System.err.println(ex.getMessage());
-            ex.printStackTrace();
+            LOG.error(ex.getMessage());
+            LOG.error(ex.getMessage(), ex);
             sampleError();
         }
         return new ArrayList<>();
@@ -576,14 +581,14 @@ public class SimplePokemonBot implements PokemonBot
 
         if (!r.isPresent())
         {
-            System.err.println("Could not find a close gym.");
+            LOG.error("Could not find a close gym.");
             return r;
         }
 
         FortData gym = r.get();
         walkTo(new LatLng(gym.getLatitude(), gym.getLongitude()), false);
 
-        System.out.println(String.format("GYM for %s guarded by %d %s for %d points",
+        LOG.info(String.format("GYM for %s guarded by %d %s for %d points",
             gym.getOwnedByTeam(), gym.getGuardPokemonCp(),
             gym.getGuardPokemonId(), gym.getGymPoints()));
 
@@ -604,8 +609,8 @@ public class SimplePokemonBot implements PokemonBot
         }
         catch (Exception ex)
         {
-            System.err.println(ex.getMessage());
-            ex.printStackTrace();
+            LOG.error(ex.getMessage());
+            LOG.error(ex.getMessage(), ex);
             sampleError();
         }
         return new ArrayList<>();
@@ -629,7 +634,7 @@ public class SimplePokemonBot implements PokemonBot
 
         pokestops.stream().filter(p -> p.canLoot(true)).forEach(p ->
         {
-            System.out.println("Wandering to nearby Pokestop...");
+            LOG.info("Wandering to nearby Pokestop...");
             botWalker.walkTo(getStepMeters(), getCurrentLocation(),
                 new LatLng(p.getLatitude(), p.getLongitude()), false);
             results.add(lootPokestop(p));
