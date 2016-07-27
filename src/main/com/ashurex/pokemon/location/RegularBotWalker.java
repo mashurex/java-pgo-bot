@@ -1,7 +1,8 @@
 package com.ashurex.pokemon.location;
 import com.ashurex.pokemon.BotStep;
-import com.ashurex.pokemon.PokemonBot;
-import com.ashurex.pokemon.logging.LocationLogger;
+import com.ashurex.pokemon.bot.event.BotActivity;
+import com.ashurex.pokemon.bot.event.HeartBeatListener;
+import com.ashurex.pokemon.bot.event.LocationListener;
 import com.google.maps.DirectionsApi;
 import com.google.maps.GeoApiContext;
 import com.google.maps.model.*;
@@ -19,8 +20,9 @@ public class RegularBotWalker implements BotWalker
     private static final double MAX_WALKING_SPEED = 2.1;
     private final GeoApiContext geoApiContext;
     private final boolean USE_WALKING_SPEED = false;
-    private final LocationLogger locationLogger;
-    private final PokemonBot parentBot;
+    private final HeartBeatListener heartBeatListener;
+    private final List<BotActivity> postStepActivities = new ArrayList<>();
+    private final LocationListener locationListener;
 
     private LatLng currentLocation;
     private long lastLocationMs = 0;
@@ -29,13 +31,29 @@ public class RegularBotWalker implements BotWalker
     // TODO: Remove parent bot requirement and use events
     // TODO: Manage map API cache updates
 
-    public RegularBotWalker(PokemonBot parentBot, GeoApiContext geoApiContext, LocationLogger locationLogger)
+    public RegularBotWalker(
+        final LatLng origin,
+        final LocationListener locationListener,
+        final HeartBeatListener heartBeatListener,
+        final GeoApiContext geoApiContext)
     {
         this.geoApiContext = geoApiContext;
-        this.locationLogger = locationLogger;
-        this.parentBot = parentBot;
+        this.heartBeatListener = heartBeatListener;
+        this.locationListener = locationListener;
+        this.currentLocation = origin;
+        this.setLastLocationMs(System.currentTimeMillis());
     }
 
+
+    public synchronized void addPostStepActivity(BotActivity activity)
+    {
+        this.postStepActivities.add(activity);
+    }
+
+    public void performPostStepActivities()
+    {
+        postStepActivities.forEach(BotActivity::performActivity);
+    }
 
     /**
      * Walks the bot from origin to destination, doing various tasks along the way.
@@ -82,9 +100,7 @@ public class RegularBotWalker implements BotWalker
 
             double speed = setCurrentLocation(step);
 
-            parentBot.catchNearbyPokemon();
-            parentBot.lootNearbyPokestops(false);
-            parentBot.heartBeat();
+            heartBeatListener.heartBeat();
 
             if (USE_WALKING_SPEED
                 && !Double.isNaN(speed) && !Double.isInfinite(speed)
@@ -93,6 +109,8 @@ public class RegularBotWalker implements BotWalker
                 System.out.println(String.format("Walking too fast (%2.2f m/s), slowing down.", speed));
                 longSleep();
             }
+
+            performPostStepActivities();
         }
     }
 
@@ -120,7 +138,8 @@ public class RegularBotWalker implements BotWalker
         else if(steps.length == 1)
         {
             setCurrentLocation(destination);
-            parentBot.heartBeat();
+            heartBeatListener.heartBeat();
+            performPostStepActivities();
             return;
         }
 
@@ -129,18 +148,18 @@ public class RegularBotWalker implements BotWalker
             destination.lat, destination.lng, origin.lat, origin.lng, steps.length));
 
 
-        LatLng prv = origin;
+        // LatLng prv = origin;
         for(LatLng step: steps)
         {
             double speed = setCurrentLocation(step);
-            printSpeed(speed, prv, step);
-            prv = step;
-            parentBot.catchNearbyPokemon();
+            // printSpeed(speed, prv, step);
+            // prv = step;
+            performPostStepActivities();
         }
 
         sleep();
-        parentBot.catchNearbyPokemon();
-        parentBot.heartBeat();
+        heartBeatListener.heartBeat();
+        performPostStepActivities();
     }
 
     /**
@@ -283,9 +302,7 @@ public class RegularBotWalker implements BotWalker
             {
                 newLocation.lat += getSmallRandom();
                 newLocation.lng += getSmallRandom();
-
-                parentBot.setLocation(newLocation, getAltitude(newLocation) + getSmallRandom());
-                logLocation(newLocation);
+                locationListener.updateCurrentLocation(newLocation, getAltitude(newLocation) + getSmallRandom());
             }
 
             setLastLocationMs(System.currentTimeMillis());
@@ -302,23 +319,10 @@ public class RegularBotWalker implements BotWalker
         return 0;
     }
 
-    /**
-     * Logs the {@link LatLng} to the {@link LocationLogger} instance.
-     * @param loc
-     */
-    protected final synchronized void logLocation(LatLng loc)
-    {
-        try
-        {
-            if (locationLogger != null) { locationLogger.write(loc); }
-        }
-        catch (Exception ex)
-        {
-            System.err.println("Error writing location to log.");
-            ex.printStackTrace();
-        }
-    }
 
+    /*
+
+    */
 
     public final synchronized long getLastLocationMs() { return lastLocationMs; }
 

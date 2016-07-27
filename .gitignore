@@ -1,0 +1,6 @@
+build
+.idea
+.gradle
+output-points.log
+gtoken.txt
+coords.txt
