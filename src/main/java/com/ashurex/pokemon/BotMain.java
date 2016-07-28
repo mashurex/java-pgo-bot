@@ -47,7 +47,7 @@ public class BotMain
         Option destLatOpt = new Option(null, "dest-lat", true, "Destination latitude");
         Option destLngOpt = new Option(null, "dest-lng", true, "Destination longitude");
         Option pokemonOpt = new Option(null, "pokemon", true, "Target Pokemon family name");
-
+        Option helpOpt = new Option("h", "help", false, "Displays help");
         Option spinFixModeOpt = new Option(null, "softban", false, "Attempt to spin fix a soft ban");
         Option fightModeOpt = new Option(null, "fight", false, "Walk to nearby Gyms and fight");
 
@@ -70,6 +70,7 @@ public class BotMain
         options.addOption(spinFixModeOpt);
         options.addOption(fightModeOpt);
         options.addOption(doFightsOpt);
+        options.addOption(helpOpt);
 
         CommandLineParser parser = new DefaultParser();
         final CommandLine commandLine;
@@ -80,6 +81,12 @@ public class BotMain
                 !(commandLine.hasOption(destLatOpt.getLongOpt()) && commandLine.hasOption(destLngOpt.getLongOpt())))
             {
                 throw new ParseException("Destination latitude and longitude are required for snipe mode.");
+            }
+            else if(commandLine.hasOption(helpOpt.getOpt()) || commandLine.hasOption(helpOpt.getLongOpt()))
+            {
+                HelpFormatter formatter = new HelpFormatter();
+                formatter.printHelp("pgobot", options);
+                return;
             }
         }
         catch(ParseException exp)
