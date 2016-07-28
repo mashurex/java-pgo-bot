@@ -1,1 +1,5 @@
-rootProject.name = 'PokeBot'
+rootProject.name = 'pgojbot'
+include ":geocalc", ":PokeGOAPI-Java"
+
+project(':PokeGOAPI-Java').projectDir = new File(rootDir, 'submodules/PokeGOAPI-Java')
+project(':geocalc').projectDir = new File(rootDir, 'submodules/geocalc')

@@ -14,6 +14,7 @@ import com.ashurex.pokemon.location.LocationUtil;
 import com.google.maps.GeoApiContext;
 import com.google.maps.model.LatLng;
 import com.pokegoapi.api.PokemonGo;
+import com.pokegoapi.api.gym.Gym;
 import com.pokegoapi.api.inventory.CandyJar;
 import com.pokegoapi.api.inventory.EggIncubator;
 import com.pokegoapi.api.inventory.Inventories;
@@ -28,6 +29,7 @@ import com.pokegoapi.api.player.PlayerProfile;
 import com.pokegoapi.api.pokemon.Pokemon;
 import com.pokegoapi.exceptions.LoginFailedException;
 import com.pokegoapi.exceptions.RemoteServerException;
+import com.pokegoapi.util.SystemTimeImpl;
 import okhttp3.OkHttpClient;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
@@ -115,7 +117,7 @@ public class SimplePokemonBot implements PokemonBot
 
         this.START_LOCATION = options.getBotOrigin();
         this.httpClient = new OkHttpClient();
-        this.api = new PokemonGo(options.getCredentialProvider(this.httpClient), this.httpClient);
+        this.api = new PokemonGo(options.getCredentialProvider(this.httpClient), this.httpClient, new SystemTimeImpl());
 
         this.setStepMeters(options.getStepMeters());
 
@@ -150,7 +152,7 @@ public class SimplePokemonBot implements PokemonBot
         }
 
         BotWalker walker = new RegularBotWalker(options.getBotOrigin(), locationListener, heartBeatListener,
-            buildGeoApiContext(), options);
+            buildGeoApiContext(options.getMapsKey()), options);
 
         walker.addPostStepActivity(catchNearbyPokemonActivity);
 
@@ -330,11 +332,11 @@ public class SimplePokemonBot implements PokemonBot
         return new SimpleDateFormat("mm:ss:SSS").format(new Date(diffMs));
     }
 
-    protected static GeoApiContext buildGeoApiContext()
+    protected static GeoApiContext buildGeoApiContext(String apiKey)
     {
         return new GeoApiContext()
             // TODO: Get from configuration
-            .setApiKey("AIzaSyCy9KVAL1d6LFw1ZiXZVGg6b2df6MJsK90")
+            .setApiKey(apiKey)
             .setQueryRateLimit(10)
             .setConnectTimeout(5, TimeUnit.SECONDS)
             .setReadTimeout(5, TimeUnit.SECONDS)
@@ -478,6 +480,41 @@ public class SimplePokemonBot implements PokemonBot
         }
     }
 
+    public void fightAtNearestGym()
+    {
+        System.out.println("Attempting to fight at nearest Gym");
+
+        try
+        {
+            List<Gym> gyms = getApi().getMap().getGyms()
+                                     .stream()
+                                     .filter(g -> {
+                                         try { return g.isAttackable(); } catch (Exception ignore){ return false; }
+                                     })
+                                     .sorted((Gym a, Gym b) ->
+            {
+                return Double.compare(LocationUtil.getDistance(getStartLocation(), new LatLng(a.getLatitude(), a.getLongitude())),
+                    LocationUtil.getDistance(getStartLocation(), new LatLng(b.getLatitude(), b.getLongitude())));
+            }).collect(Collectors.toList());
+
+            if(gyms.size() == 0){ LOG.error("Could not find a nearby gym."); return; }
+
+            for(Gym gym: gyms)
+            {
+                if(gym.isAttackable())
+                {
+                    botWalker.runTo(getCurrentLocation(), new LatLng(gym.getLatitude(), gym.getLongitude()));
+                    setCurrentLocation(new LatLng(gym.getLatitude(), gym.getLongitude()), 1.1);
+                    GymFighter.fight(gym, getInventory().getPokebank());
+                }
+            }
+        }
+        catch(Exception ex)
+        {
+            LOG.error(ex.getMessage(), ex);
+        }
+
+    }
     private List<ReleasePokemonResponseOuterClass.ReleasePokemonResponse.Result> doTransfers()
     {
         TransferPokemonActivity a = new TransferPokemonActivity(this, MIN_CP_THRESHOLD);

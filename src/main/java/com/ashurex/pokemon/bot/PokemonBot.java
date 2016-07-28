@@ -38,5 +38,6 @@ public interface PokemonBot
     void wander();
     List<CatchResult> snipe(LatLng origin, LatLng destination, PokemonId pokemonId);
     boolean fixSoftBan(LatLng destination);
+    void fightAtNearestGym();
 
 }

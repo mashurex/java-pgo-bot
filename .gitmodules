@@ -1,0 +1,6 @@
+[submodule "submodules/PokeGOAPI-Java"]
+	path = submodules/PokeGOAPI-Java
+	url = https://github.com/Grover-c13/PokeGOAPI-Java
+[submodule "submodules/geocalc"]
+	path = submodules/geocalc
+	url = https://github.com/grumlimited/geocalc.git

@@ -7,3 +7,4 @@ coords.txt
 pokebot.log
 lib
 coords.log
+src/main/resources/pokebot.properties
