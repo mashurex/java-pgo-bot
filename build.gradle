@@ -1,7 +1,6 @@
 group = 'com.ashurex.pokemon'
 version = '0.0.1-SNAPSHOT'
 
-apply plugin: 'idea'
 apply plugin: 'java'
 
 description = """Pokemon GO Java Bot"""
@@ -9,62 +8,64 @@ description = """Pokemon GO Java Bot"""
 sourceCompatibility = 1.8
 targetCompatibility = 1.8
 
-
 repositories {
     mavenCentral()
+	maven { url "https://jitpack.io" }	
+    mavenLocal()
 }
 
-dependencies {
-    compile 'com.google.maps:google-maps-services:0.1.15'
-    compile 'com.squareup.okio:okio:1.9.0'
-    compile 'com.squareup.moshi:moshi:1.2.0'
-    compile 'com.annimon:stream:1.1.1'
-    compile 'com.squareup.okhttp3:okhttp:3.4.0-RC1'
-    compile 'com.google.protobuf:protobuf-java:3.0.0-beta-3'
-    compile 'org.apache.commons:commons-lang3:3.4'
-    compile 'commons-cli:commons-cli:1.3.1'
-    compile 'ch.qos.logback:logback-classic:1.1.7'
-    compileOnly 'org.projectlombok:lombok:1.16.10'
-    compile files('lib/geocalc-0.5.1.jar')
-    compile files('lib/PokeGOAPI-Java-0.0.1-SNAPSHOT.jar')
-}
-
-idea {
-    module {
-		
-    }
-}
-
-sourceSets {
-	main {
-		java {
-			srcDir 'src/main/java'
-		}	
+subprojects {
+	apply plugin: 'java'
+	repositories {
+	    mavenCentral()
+    	maven { url "https://jitpack.io" }
+    	mavenLocal()
 	}
 }
 
-task sourcesJar(type: Jar) {
-    from sourceSets.main.java.srcDirs
-    classifier = 'sources'
+project(':PokeGOAPI-Java') {
+	javadoc {
+		onlyIf {
+			project.hasProperty("doDocs")
+		}
+	}
 }
 
-artifacts {
-    archives sourcesJar
+project(':geocalc') {
+	dependencies {
+		compile 'log4j:log4j:1.2.17'
+		testCompile  'junit:junit:4.12'
+	}	
+	test {
+		onlyIf {
+			project.hasProperty("doTests")
+		}
+	}
 }
-
-task bundle(type: Jar) {
-    manifest {
-        attributes  'Implementation-Title': 'Pokemon GO Walking Bot',
-                    'Implementation-Version': version,
-                    'Main-Class': 'com.ashurex.pokemon.BotMain'
-    }
-    baseName = project.name + '-bundle'
-    from { configurations.compile.collect { it.isDirectory() ? it : zipTree(it) } }
-    with jar
+	
+dependencies {
+	compile project(':geocalc')
+	compile project(':PokeGOAPI-Java')
+    compile 'com.google.maps:google-maps-services:0.1.15'
+    compile 'com.squareup.okhttp3:okhttp:3.4.0-RC1'
+    compile 'org.apache.commons:commons-lang3:3.4'
+    compile 'commons-cli:commons-cli:1.3.1'
+    compile 'ch.qos.logback:logback-classic:1.1.7'
+	testCompile  'junit:junit:4.12'
 }
 
 jar {
+	from(configurations.compile.collect { it.isDirectory() ? it : zipTree(it) }) {
+        exclude "META-INF/*.SF"
+        exclude "META-INF/*.DSA"
+        exclude "META-INF/*.RSA"
+    }
+    
     manifest {
-        attributes 'Main-Class': 'com.ashurex.pokemon.BotMain'
+		attributes  'Implementation-Title': rootProject.name,
+                    'Implementation-Version': version,        
+	                'Built-Date': new Date(),
+    	            'Built-JDK': System.getProperty('java.version'),
+					'Main-Class': 'com.ashurex.pokemon.BotMain'
     }
 }
