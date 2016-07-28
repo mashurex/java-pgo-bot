@@ -480,6 +480,9 @@ public class SimplePokemonBot implements PokemonBot
         }
     }
 
+    /**
+     * TODO: This doesn't really work yet
+     */
     public void fightAtNearestGym()
     {
         System.out.println("Attempting to fight at nearest Gym");

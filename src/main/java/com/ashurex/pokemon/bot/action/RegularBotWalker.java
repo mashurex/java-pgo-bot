@@ -94,9 +94,7 @@ public class RegularBotWalker implements BotWalker
         LatLng[] steps = getStepsToDestination(origin, destination, stepSize);
         if (steps == null)
         {
-            LOG.error("No steps returned!");
-            setCurrentLocation(destination);
-            return;
+            throw new RuntimeException("Could not get any steps to the specified destination: " + destination.toString());
         }
         else { LOG.info(steps.length + " steps to destination."); }
 
@@ -115,7 +113,7 @@ public class RegularBotWalker implements BotWalker
                         long timeout = getTimeoutForDistance(distance);
                         if(timeout > 0)
                         {
-                            LOG.info("Slowing for " + timeout + "ms");
+                            LOG.debug("Slowing for " + timeout + "ms");
                             Thread.sleep(timeout);
                         }
                     }
@@ -134,7 +132,7 @@ public class RegularBotWalker implements BotWalker
                 && !Double.isNaN(speed) && !Double.isInfinite(speed)
                 && (Double.compare(speed, MAX_WALKING_SPEED) > 0))
             {
-                LOG.info(String.format("Walking too fast (%2.2f m/s), slowing down.", speed));
+                LOG.debug(String.format("Walking too fast (%2.2f m/s), slowing down.", speed));
                 longSleep();
             }
 
