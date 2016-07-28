@@ -1,10 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
-
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
-        <encoder>
-            <pattern>%d{HH:mm:ss.SSS} [%thread] %logger{36} - %msg%n</pattern>
+        <!-- This encoder colorizes the console output very naively and will slow things down -->
+        <encoder class="ch.qos.logback.core.encoder.LayoutWrappingEncoder">
+            <layout class="com.ashurex.pokemon.logging.PokebotConsoleLoggingLayout"/>
         </encoder>
+
+        <!-- Use this encoder for performance -->
+        <!--
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} %highlight(%-5level) %logger{20} - %msg%n</pattern>
+        </encoder>
+        -->
     </appender>
 
     <appender name="FILE" class="ch.qos.logback.core.FileAppender">
@@ -29,6 +36,10 @@
         <appender-ref ref="FILE"/>
     </logger>
 
+    <!--
+      - Coordinate logging path to track where the bot has been.
+      - Change the level to WARN to shut down logging.
+      -->
     <logger name="Coordinates" level="DEBUG" additivity="false">
         <appender-ref ref="COORDS" />
     </logger>

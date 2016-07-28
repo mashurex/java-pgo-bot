@@ -22,7 +22,7 @@ public class SimpleLocationLogger implements LocationLogger
     public synchronized void write(LatLng point)
     {
         if(point == null){ return; }
-        LOG.error(point.toString());
+        LOG.info(point.toString());
     }
 
     @Override

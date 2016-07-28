@@ -29,6 +29,7 @@ import com.pokegoapi.api.player.PlayerProfile;
 import com.pokegoapi.api.pokemon.Pokemon;
 import com.pokegoapi.exceptions.LoginFailedException;
 import com.pokegoapi.exceptions.RemoteServerException;
+import com.pokegoapi.util.SystemTimeImpl;
 import okhttp3.OkHttpClient;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
@@ -116,7 +117,7 @@ public class SimplePokemonBot implements PokemonBot
 
         this.START_LOCATION = options.getBotOrigin();
         this.httpClient = new OkHttpClient();
-        this.api = new PokemonGo(options.getCredentialProvider(this.httpClient), this.httpClient);
+        this.api = new PokemonGo(options.getCredentialProvider(this.httpClient), this.httpClient, new SystemTimeImpl());
 
         this.setStepMeters(options.getStepMeters());
 

@@ -28,7 +28,7 @@ public class PokebotProperties
     private static final String MAPS_KEY = "pokebot.maps.key";
     private static final String USERNAME = "pokebot.auth.username";
     private static final String PASSWORD = "pokebot.auth.password";
-    private static final String DEFAULT_ORIGIN = "pokebot.deafult.origin";
+    private static final String DEFAULT_ORIGIN = "pokebot.defaults.origin";
     private static final String LOGIN_PROVIDER = "pokebot.auth.provider";
 
     public PokebotProperties()
@@ -46,11 +46,17 @@ public class PokebotProperties
         {
             inputStream = PokebotProperties.class.getClassLoader().getResourceAsStream(DEFAULT_FILENAME);
 
-            if (inputStream != null) { properties.load(inputStream); }
-            else
+            try
             {
-                LOG.debug("Could not find properties file on the classpath.");
-                return new PokebotProperties();
+                if (inputStream != null) { properties.load(inputStream); }
+                else
+                {
+                    LOG.debug("Could not find properties file on the classpath.");
+                }
+            }
+            catch(Exception ex)
+            {
+                LOG.error("Error reading classpath properties: " + ex.getMessage(), ex);
             }
 
             // Check for and merge external props
@@ -88,7 +94,7 @@ public class PokebotProperties
 
     /**
      * Returns BotOptions merged from properties and command line arguments.
-     *
+     * Precedence order CommandLine > External properties file > Classpath properties file.
      * @param args
      * @return
      * @throws IOException
@@ -123,7 +129,11 @@ public class PokebotProperties
     {
         if(StringUtils.isEmpty(value)){ return null; }
         String[] parts = value.split(",");
-        if(parts.length != 2){ return null; }
+        if(parts.length != 2)
+        {
+            throw new IllegalArgumentException("Invalid location value: " + value);
+        }
+
         return new LatLng(Double.valueOf(parts[0]), Double.valueOf(parts[1]));
     }
 

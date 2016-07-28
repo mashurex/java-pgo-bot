@@ -1,11 +1,11 @@
 package com.ashurex.pokemon;
-import com.ashurex.pokemon.auth.SimpleGoogleLoginOAuthCompleteListener;
 import com.google.maps.model.LatLng;
 import com.pokegoapi.auth.CredentialProvider;
-import com.pokegoapi.auth.GoogleCredentialProvider;
+import com.pokegoapi.auth.GoogleUserCredentialProvider;
 import com.pokegoapi.auth.PtcCredentialProvider;
 import com.pokegoapi.exceptions.LoginFailedException;
 import com.pokegoapi.exceptions.RemoteServerException;
+import com.pokegoapi.util.SystemTimeImpl;
 import okhttp3.OkHttpClient;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.lang3.StringUtils;
@@ -15,6 +15,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.Scanner;
 
 /**
  * Author: Mustafa Ashurex
@@ -27,7 +28,7 @@ public class BotOptions
     private boolean doEvolutions = true;
     private boolean useWalkingSpeed = true;
     private boolean doTransfers = true;
-    private int minCpThreshold = 70;
+    private int minCpThreshold = 200;
     private File tokenFile = null;
     private String username = null;
     private String password = null;
@@ -36,6 +37,8 @@ public class BotOptions
     private boolean debugMode = false;
     private LatLng botOrigin = null;
     private String mapsKey = null;
+    private LatLng botDestination = null;
+    private boolean doFights = false;
 
     public enum LoginProvider
     {
@@ -76,6 +79,7 @@ public class BotOptions
         options.setDoEvolutions(args.hasOption("e"));
         options.setDebugMode(args.hasOption("x"));
         options.setUseWalkingSpeed(args.hasOption("w"));
+        options.setDoFights(args.hasOption("f"));
 
         if(args.hasOption("lat") && args.hasOption("lng"))
         {
@@ -84,9 +88,17 @@ public class BotOptions
             options.setBotOrigin(new LatLng(lat, lng));
         }
 
-        options.setLoginProvider(LoginProvider.valueOf(args.getOptionValue("l", LoginProvider.PTC.toString()).toUpperCase()));
+        options.setLoginProvider(
+            LoginProvider.valueOf(args.getOptionValue("l", LoginProvider.PTC.toString()).toUpperCase()));
         options.setUsername(args.getOptionValue("u"));
         options.setPassword(args.getOptionValue("p"));
+
+        if(args.hasOption("dest-lat") && args.hasOption("dest-lng"))
+        {
+            double lat = Double.valueOf(args.getOptionValue("dest-lat"));
+            double lng = Double.valueOf(args.getOptionValue("dest-lng"));
+            options.setBotDestination(new LatLng(lat, lng));
+        }
 
         return options;
     }
@@ -138,25 +150,50 @@ public class BotOptions
         return null;
     }
 
-    public CredentialProvider getCredentialProvider(OkHttpClient okHttpClient)
-    throws LoginFailedException, RemoteServerException
+    protected void writeTokenString(String token) throws IOException
+    {
+        Files.write(Paths.get(tokenFile.getAbsolutePath()), token.getBytes());
+    }
+
+    protected GoogleUserCredentialProvider cleanGoogleLogin(final OkHttpClient okHttpClient) throws LoginFailedException, RemoteServerException, IOException
+    {
+        GoogleUserCredentialProvider provider = new GoogleUserCredentialProvider(okHttpClient);
+        System.out.println("Please go to " + GoogleUserCredentialProvider.LOGIN_URL);
+        System.out.println("Enter authorisation code:");
+        Scanner sc = new Scanner(System.in);
+        String access = sc.nextLine();
+        provider.login(access);
+
+        writeTokenString(provider.getRefreshToken());
+
+        return provider;
+    }
+
+    public CredentialProvider getCredentialProvider(final OkHttpClient okHttpClient)
+    throws LoginFailedException, RemoteServerException, IOException
     {
         if(getLoginProvider() == LoginProvider.GOOGLE)
         {
             String refreshToken = getRefreshToken();
             if(StringUtils.isEmpty(refreshToken))
             {
-                return new GoogleCredentialProvider(okHttpClient,
-                    new SimpleGoogleLoginOAuthCompleteListener(getTokenFile()));
+                return cleanGoogleLogin(okHttpClient);
             }
             else
             {
-                return new GoogleCredentialProvider(okHttpClient, refreshToken);
+                try
+                {
+                    return new GoogleUserCredentialProvider(okHttpClient, refreshToken, new SystemTimeImpl());
+                }
+                catch(Exception ex)
+                {
+                    return cleanGoogleLogin(okHttpClient);
+                }
             }
         }
         else
         {
-            return new PtcCredentialProvider(okHttpClient, getUsername(), getPassword());
+            return new PtcCredentialProvider(okHttpClient, getUsername(), getPassword(), new SystemTimeImpl());
         }
     }
 
@@ -293,5 +330,25 @@ public class BotOptions
     public void setMapsKey(String mapsKey)
     {
         this.mapsKey = mapsKey;
+    }
+
+    public LatLng getBotDestination()
+    {
+        return botDestination;
+    }
+
+    public void setBotDestination(LatLng botDestination)
+    {
+        this.botDestination = botDestination;
+    }
+
+    public boolean isDoFights()
+    {
+        return doFights;
+    }
+
+    public void setDoFights(boolean doFights)
+    {
+        this.doFights = doFights;
     }
 }
