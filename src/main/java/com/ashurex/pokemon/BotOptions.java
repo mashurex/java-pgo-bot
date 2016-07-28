@@ -35,6 +35,7 @@ public class BotOptions
     private String refreshToken = null;
     private boolean debugMode = false;
     private LatLng botOrigin = null;
+    private String mapsKey = null;
 
     public enum LoginProvider
     {
@@ -282,5 +283,15 @@ public class BotOptions
     public void setBotOrigin(LatLng botOrigin)
     {
         this.botOrigin = botOrigin;
+    }
+
+    public String getMapsKey()
+    {
+        return mapsKey;
+    }
+
+    public void setMapsKey(String mapsKey)
+    {
+        this.mapsKey = mapsKey;
     }
 }
