@@ -1,7 +1,6 @@
 package com.ashurex.pokemon.bot;
 import POGOProtos.Data.Player.PlayerStatsOuterClass.PlayerStats;
 import POGOProtos.Enums.PokemonIdOuterClass;
-import POGOProtos.Map.Fort.FortDataOuterClass.FortData;
 import POGOProtos.Networking.Responses.ReleasePokemonResponseOuterClass;
 import com.ashurex.pokemon.BotOptions;
 import com.ashurex.pokemon.bot.action.*;
@@ -96,21 +95,6 @@ public class SimplePokemonBot implements PokemonBot
         }
     }
 
-    protected synchronized void printConfiguration()
-    {
-        List<String> configs = new ArrayList<>();
-        configs.add("Walking Speed: " + (USE_WALKING_SPEED ? "Enabled" : "Disabled"));
-        configs.add("Evolutions: " + (DO_EVOLUTIONS ? "Enabled" : "Disabled"));
-        configs.add("Transfers: " + (DO_TRANSFERS ? "Enabled" : "Disabled"));
-        configs.add("Debug: " + (DEBUG_MODE ? "Enabled" : "Disabled"));
-        configs.add("Minimum CP Threshold: " + MIN_CP_THRESHOLD);
-        configs.add("Step size: " + getStepMeters());
-        configs.add(String.format("Starting Point: [%3.6f,%3.6f]", START_LOCATION.lat, START_LOCATION.lng));
-
-        LOG.info("Startup configuration: ");
-        LOG.info("\t" + StringUtils.join(configs, "\n\t"));
-    }
-
     public SimplePokemonBot(BotOptions options)
     throws RemoteServerException, LoginFailedException, IOException
     {
@@ -144,10 +128,12 @@ public class SimplePokemonBot implements PokemonBot
         LocationListener locationListener = new LoggingLocationListener(bot);
 
         SimpleHeartBeatListener heartBeatListener = new SimpleHeartBeatListener(options.getHeartBeatPace());
+        // FIXME: Disabling this for throttling testing
         heartBeatListener.addHeartBeatActivity(catchNearbyPokemonActivity);
 
         if(options.isDoTransfers())
         {
+            // FIXME: Disabling this for throttling testing
             heartBeatListener.addHeartBeatActivity(transferPokemonActivity);
         }
 
@@ -361,8 +347,8 @@ public class SimplePokemonBot implements PokemonBot
 
                 catchNearbyPokemon();
                 lootNearbyPokestops(false);
-                if(DO_TRANSFERS){ doTransfers(); }
-                if(DO_EVOLUTIONS){ doEvolutions(); }
+                if(DO_TRANSFERS){ doTransfers(); sleep(100 + getRandom().longValue()); }
+                if(DO_EVOLUTIONS){ doEvolutions(); sleep(100 + getRandom().longValue()); }
 
                 for (Pokestop p : pokestops)
                 {
@@ -489,16 +475,16 @@ public class SimplePokemonBot implements PokemonBot
 
         try
         {
-            List<Gym> gyms = getApi().getMap().getGyms()
-                                     .stream()
-                                     .filter(g -> {
-                                         try { return g.isAttackable(); } catch (Exception ignore){ return false; }
-                                     })
-                                     .sorted((Gym a, Gym b) ->
-            {
-                return Double.compare(LocationUtil.getDistance(getStartLocation(), new LatLng(a.getLatitude(), a.getLongitude())),
-                    LocationUtil.getDistance(getStartLocation(), new LatLng(b.getLatitude(), b.getLongitude())));
-            }).collect(Collectors.toList());
+            List<Gym> gyms = getGyms().stream()
+                                      .filter(g -> {
+                                            try {
+                                                return g.isAttackable();
+                                            } catch (Exception ignore){ return false; }
+                                        })
+                                      .sorted((Gym a, Gym b) -> {
+                                          return LocationUtil.compare(getStartLocation(), a, b);
+                                      })
+                                      .collect(Collectors.toList());
 
             if(gyms.size() == 0){ LOG.error("Could not find a nearby gym."); return; }
 
@@ -508,7 +494,7 @@ public class SimplePokemonBot implements PokemonBot
                 {
                     botWalker.runTo(getCurrentLocation(), new LatLng(gym.getLatitude(), gym.getLongitude()));
                     setCurrentLocation(new LatLng(gym.getLatitude(), gym.getLongitude()), 1.1);
-                    GymFighter.fight(gym, getInventory().getPokebank());
+                    GymFighter.fight(getApi().getPlayerProfile(), gym, getInventory().getPokebank());
                 }
             }
         }
@@ -554,8 +540,10 @@ public class SimplePokemonBot implements PokemonBot
         this.lastOperation = this.currentOperation;
         this.currentOperation = status;
 
-//        if(lastOperation != currentOperation)
-//            LOG.info("Switching from " + this.lastOperation + " to " + this.currentOperation);
+        if(DEBUG_MODE && lastOperation != currentOperation)
+        {
+            LOG.trace("Switching from " + this.lastOperation + " to " + this.currentOperation);
+        }
 
         return this.lastOperation;
     }
@@ -576,7 +564,7 @@ public class SimplePokemonBot implements PokemonBot
         List<CatchablePokemon> catchablePokemon = getCatchablePokemon();
         if (catchablePokemon.size() == 0) { return new ArrayList<>(); }
 
-        LOG.info("Found " + catchablePokemon.size() + " nearby pokemon to try and catch.");
+        LOG.debug("Found " + catchablePokemon.size() + " nearby pokemon to try and catch.");
 
         return PokemonCatcher.catchPokemon(catchablePokemon);
     }
@@ -589,7 +577,6 @@ public class SimplePokemonBot implements PokemonBot
         }
         catch (Exception ex)
         {
-            LOG.error(ex.getMessage());
             LOG.error(ex.getMessage(), ex);
             sampleError();
         }
@@ -597,18 +584,30 @@ public class SimplePokemonBot implements PokemonBot
         return new ArrayList<>();
     }
 
-    public Collection<FortData> getGyms()
+    public List<Gym> getGyms()
     {
         try
         {
-            return getMap().getMapObjects().getGyms();
+            shortSleep();
+            return getMap().getGyms();
+        }
+        catch (RemoteServerException ex)
+        {
+            // TODO: Retry/wait hack.
+            sampleError();
+            try
+            {
+                longSleep();
+                return getMap().getGyms();
+            }
+            catch(Exception ignore){}
         }
         catch (Exception ex)
         {
-            LOG.error(ex.getMessage());
             LOG.error(ex.getMessage(), ex);
             sampleError();
         }
+
         return new ArrayList<>();
     }
 /*
@@ -664,7 +663,6 @@ public class SimplePokemonBot implements PokemonBot
      */
     public synchronized List<PokestopLootResult> lootNearbyPokestops(boolean walkToStops)
     {
-
         final LatLng origin = getCurrentLocation();
 
         List<Pokestop> pokestops = getNearbyPokestops();
@@ -674,7 +672,7 @@ public class SimplePokemonBot implements PokemonBot
 
         pokestops.stream().filter(p -> p.canLoot(true)).forEach(p ->
         {
-            LOG.info("Wandering to nearby Pokestop...");
+            LOG.debug("Wandering to nearby Pokestop...");
             botWalker.walkTo(getStepMeters(), getCurrentLocation(),
                 new LatLng(p.getLatitude(), p.getLongitude()), false);
             results.add(lootPokestop(p));
@@ -688,7 +686,7 @@ public class SimplePokemonBot implements PokemonBot
     /**
      * Attempt to loot the provided Pokestop.
      * @param pokestop The Pokestop to loot.
-     * @return {@link Optional} will be empty if errors occurred.
+     * @return null if errors occurred fetching data
      */
     public PokestopLootResult lootPokestop(Pokestop pokestop)
     {
@@ -742,7 +740,7 @@ public class SimplePokemonBot implements PokemonBot
      */
     private boolean longSleep()
     {
-        return sleep(new Double((Math.random() * 2000)).intValue() + 1000);
+        return Sleeper.longSleep();
     }
 
     /**
@@ -751,7 +749,7 @@ public class SimplePokemonBot implements PokemonBot
      */
     private boolean sleep()
     {
-        return sleep(new Double((Math.random() * 1000)).intValue());
+        return Sleeper.sleep();
     }
 
     /**
@@ -761,16 +759,12 @@ public class SimplePokemonBot implements PokemonBot
      */
     private boolean sleep(long wait)
     {
-        try
-        {
-            Thread.sleep(wait);
-            return true;
-        }
-        catch (InterruptedException ignore)
-        {
-            sampleError();
-            return false;
-        }
+        return Sleeper.sleep(wait);
+    }
+
+    private boolean shortSleep()
+    {
+        return Sleeper.shortSleep();
     }
 
     public synchronized BotWalker getWalker()
@@ -781,5 +775,21 @@ public class SimplePokemonBot implements PokemonBot
     public synchronized void setWalker(BotWalker botWalker)
     {
         this.botWalker = botWalker;
+    }
+
+    protected synchronized void printConfiguration()
+    {
+        if(!DEBUG_MODE){ return; }
+
+        List<String> configs = new ArrayList<>();
+        configs.add("Walking Speed: " + (USE_WALKING_SPEED ? "Enabled" : "Disabled"));
+        configs.add("Evolutions: " + (DO_EVOLUTIONS ? "Enabled" : "Disabled"));
+        configs.add("Transfers: " + (DO_TRANSFERS ? "Enabled" : "Disabled"));
+        configs.add("Minimum CP Threshold: " + MIN_CP_THRESHOLD);
+        configs.add("Step size: " + getStepMeters());
+        configs.add(String.format("Starting Point: [%3.6f,%3.6f]", START_LOCATION.lat, START_LOCATION.lng));
+
+        LOG.info("Startup configuration: ");
+        LOG.info("\n\t" + StringUtils.join(configs, "\n\t"));
     }
 }
