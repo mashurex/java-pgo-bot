@@ -23,12 +23,12 @@ import java.util.Scanner;
  */
 public class BotOptions
 {
-    private double stepMeters = 2;
+    private double stepMeters = 10;
     private int heartBeatPace = 50;
-    private boolean doEvolutions = true;
-    private boolean useWalkingSpeed = true;
-    private boolean doTransfers = true;
-    private int minCpThreshold = 200;
+    private boolean doEvolutions = false;
+    private boolean useWalkingSpeed = false;
+    private boolean doTransfers = false;
+    private int minCpThreshold = 250;
     private File tokenFile = null;
     private String username = null;
     private String password = null;

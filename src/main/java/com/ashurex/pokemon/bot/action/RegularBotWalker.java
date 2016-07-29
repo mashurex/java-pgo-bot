@@ -24,10 +24,15 @@ import java.util.concurrent.atomic.AtomicReference;
 public class RegularBotWalker implements BotWalker
 {
     private static final Logger LOG = LoggerFactory.getLogger(RegularBotWalker.class);
-    
+    /**
+     * Target speed in m/s when trying to enforce walking speeds.
+     */
     private static final double MAX_WALKING_SPEED = 2.1;
     private final double RUN_STEP_SIZE;
 
+    /**
+     * If {@code true} do not go faster than {@code MAX_WALKING_SPEED}.
+     */
     private final boolean USE_WALKING_SPEED;
     private final GeoApiContext geoApiContext;
     private final HeartBeatListener heartBeatListener;
@@ -38,9 +43,6 @@ public class RegularBotWalker implements BotWalker
     private AtomicLong lastLocationMs = new AtomicLong(0);
     private double lastAltitude = 2;
     private final BotOptions options;
-
-    // TODO: Remove parent bot requirement and use events
-    // TODO: Manage map API cache updates
 
     public RegularBotWalker(
         final LatLng origin,
@@ -82,19 +84,21 @@ public class RegularBotWalker implements BotWalker
     }
 
     /**
-     * Walks the bot from origin to destination, doing various tasks along the way.
+     * Walks the bot from {@code origin} to {@code destination}, doing various tasks along the way.
      *
      * @param stepSize The size of each step, in meters.
      * @param origin The point to walk from.
      * @param destination The point to walk to.
      * @param wander If true will loot nearby Pokestops and catch nearby Pokemon en route to the destination.
      */
-    public synchronized void walkTo(double stepSize, final LatLng origin, final LatLng destination, final boolean wander)
+    public synchronized void walkTo(final double stepSize, final LatLng origin, final LatLng destination,
+        final boolean wander)
     {
         LatLng[] steps = getStepsToDestination(origin, destination, stepSize);
         if (steps == null)
         {
-            throw new RuntimeException("Could not get any steps to the specified destination: " + destination.toString());
+            throw new RuntimeException("Could not get any steps to the specified destination: " +
+                destination.toString());
         }
         else { LOG.info(steps.length + " steps to destination."); }
 
@@ -119,7 +123,7 @@ public class RegularBotWalker implements BotWalker
                     }
                     catch (InterruptedException ex)
                     {
-                        LOG.error("Slowdown interrupted..." + ex.getMessage());
+                        LOG.warn("Slowdown interrupted..." + ex.getMessage());
                     }
                 }
             }
@@ -290,8 +294,8 @@ public class RegularBotWalker implements BotWalker
     }
 
     /**
-     * Returns the current speed in meters per second from the user's current location to the parameter.
-     * @param newLocation The new location to set the user's location to.
+     * Returns the current speed in meters per second from the bot's current location to the parameter.
+     * @param newLocation The new location to set the bot's location to.
      * @return The travel speed in meters per second.
      */
     protected double getCurrentSpeed(LatLng newLocation)
@@ -326,7 +330,7 @@ public class RegularBotWalker implements BotWalker
         return val;
     }
 
-    public static void printSpeed(double speed, LatLng start, LatLng end)
+    protected static void printSpeed(double speed, LatLng start, LatLng end)
     {
         if((!Double.isInfinite(speed) && !Double.isNaN(speed) && speed > 0.01))
         {
@@ -372,7 +376,7 @@ public class RegularBotWalker implements BotWalker
     {
         if(Double.isInfinite(distance) || Double.isNaN(distance) || (Double.compare(distance, 1) < 1)){ return 0; }
 
-        Double ms = ((distance / MAX_WALKING_SPEED) * 1000) + 100;
+        Double ms = ((distance / MAX_WALKING_SPEED) * 1000) + 75;
         return ms.longValue();
     }
 
