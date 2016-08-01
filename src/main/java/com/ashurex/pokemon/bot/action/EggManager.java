@@ -46,7 +46,18 @@ public class EggManager
 
     public static List<EggIncubator> getAvailableIncubators(Inventories inventory)
     {
-        return inventory.getIncubators().stream().filter(e -> !e.isInUse()).collect(Collectors.toList());
+        try {
+            return inventory.getIncubators().stream().filter(e -> {
+                try {
+                    return !e.isInUse();
+                } catch(Exception ex){ return false; }
+            }).collect(Collectors.toList());
+        }
+        catch(Exception ex)
+        {
+            LOG.error(ex.getMessage(), ex);
+            return new ArrayList<>();
+        }
     }
 
     /**

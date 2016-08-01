@@ -1,10 +1,13 @@
 package com.ashurex.pokemon.bot.action;
+
 import POGOProtos.Networking.Responses.CatchPokemonResponseOuterClass.CatchPokemonResponse.CatchStatus;
 import POGOProtos.Networking.Responses.EncounterResponseOuterClass.EncounterResponse;
 import com.pokegoapi.api.map.pokemon.CatchResult;
 import com.pokegoapi.api.map.pokemon.CatchablePokemon;
-import com.pokegoapi.api.map.pokemon.EncounterResult;
+import com.pokegoapi.api.map.pokemon.encounter.EncounterResult;
+import com.pokegoapi.api.map.pokemon.encounter.NormalEncounterResult;
 import com.pokegoapi.exceptions.LoginFailedException;
+import com.pokegoapi.exceptions.NoSuchItemException;
 import com.pokegoapi.exceptions.RemoteServerException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,7 +55,7 @@ public class PokemonCatcher
         {
             LOG.error(ex.getMessage(), ex);
         }
-        return new EncounterResult(EncounterResponse.getDefaultInstance());
+        return new NormalEncounterResult(EncounterResponse.getDefaultInstance());
     }
 
     private static CatchResult retryCatch(final CatchablePokemon pokemon)
@@ -74,6 +77,11 @@ public class PokemonCatcher
             Sleeper.sleep(150 + (100 * count));
             return pokemon.catchPokemon();
         }
+        catch(NoSuchItemException ex)
+		{
+			LOG.warn(ex.getMessage(), ex);
+			return new CatchResult();
+		}
         catch(RemoteServerException ex)
         {
             return retryCatch(pokemon, count + 1);

@@ -79,13 +79,13 @@ public class GymFighter
                 LOG.debug("Gym is disabled or not attackable!");
                 return;
             }
-
+/*
             if(profile.getTeam().getValue() == gym.getOwnedByTeam().getNumber())
             {
                 LOG.info("Not training against same team yet.");
                 return;
             }
-
+*/
             // TODO: Figure out good fight matchups
             List<PokemonDataOuterClass.PokemonData> defenders = gym.getDefendingPokemon();
             Pokemon[] team = getFightingTeam(defenders, pokeBank, defenders.size());

@@ -15,8 +15,8 @@ import com.google.maps.model.LatLng;
 import com.pokegoapi.api.PokemonGo;
 import com.pokegoapi.api.gym.Gym;
 import com.pokegoapi.api.inventory.CandyJar;
-import com.pokegoapi.api.inventory.EggIncubator;
 import com.pokegoapi.api.inventory.Inventories;
+import com.pokegoapi.api.inventory.Stats;
 import com.pokegoapi.api.map.Map;
 import com.pokegoapi.api.map.fort.FortDetails;
 import com.pokegoapi.api.map.fort.Pokestop;
@@ -166,8 +166,8 @@ public class SimplePokemonBot implements PokemonBot
 
         setCurrentLocation(destination, 0);
         Map map = getMap();
-        map.clearCache();
-        map.setUseCache(false);
+        // map.clearCache();
+        // map.setUseCache(false);
 
         try
         {
@@ -208,8 +208,8 @@ public class SimplePokemonBot implements PokemonBot
                 else { LOG.warn("Couldn't catch " + p.getPokemonId() + ": " + r.getStatus()); }
             }
 
-            map.setUseCache(true);
-            map.clearCache();
+            // map.setUseCache(true);
+            // map.clearCache();
 
             return catchResults;
         }
@@ -247,8 +247,8 @@ public class SimplePokemonBot implements PokemonBot
             long lat = Double.valueOf(pokestop.getLatitude()).longValue();
 
             Map map = getApi().getMap();
-            map.setUseCache(false);
-            map.clearCache();
+            // map.setUseCache(false);
+            // map.clearCache();
 
             for(int i = 0; i < 80; i++)
             {
@@ -300,7 +300,7 @@ public class SimplePokemonBot implements PokemonBot
     {
         try
         {
-            PlayerStats stats = getApi().getPlayerProfile().getStats();
+            Stats stats = getApi().getPlayerProfile().getStats();
             return stats.getExperience();
         }
         catch(Exception ex)
@@ -418,25 +418,33 @@ public class SimplePokemonBot implements PokemonBot
     private PlayerStats getStats()
     {
         PlayerProfile profile = getApi().getPlayerProfile();
-        PlayerStats stats = profile.getStats();
-        long experience = stats.getExperience();
-        int level = stats.getLevel();
-        int hatched = stats.getEggsHatched();
-        int evos = stats.getEvolutions();
+        try {
+            Stats stats = profile.getStats();
+            long experience = stats.getExperience();
+            int level = stats.getLevel();
+            int hatched = stats.getEggsHatched();
+            int evos = stats.getEvolutions();
 
-        LOG.info(String.format("Level %d (%d) %d evolutions, %d eggs hatched",
-            level, experience, evos, hatched));
+            LOG.info(String.format("Level %d (%d) %d evolutions, %d eggs hatched",
+                    level, experience, evos, hatched));
 
-        if(Long.compare(experience, START_EXPERIENCE) > 0)
-        {
-            LOG.info("Gained " + (experience - START_EXPERIENCE) + " experience in " + getRuntime());
+            if (Long.compare(experience, START_EXPERIENCE) > 0) {
+                LOG.info("Gained " + (experience - START_EXPERIENCE) + " experience in " + getRuntime());
+            }
+            return stats.getProto();
         }
-        return stats;
+        catch (Exception ex)
+
+        {
+            LOG.error(ex.getMessage());
+            return null;
+        }
     }
 
     /**
      * Lists out hatched eggs and puts eggs in incubators that are not in use.
      */
+    /*
     public void manageEggsAndIncubators()
     {
         try
@@ -465,7 +473,7 @@ public class SimplePokemonBot implements PokemonBot
             sampleError();
         }
     }
-
+*/
     /**
      * TODO: This doesn't really work yet
      */
@@ -516,23 +524,36 @@ public class SimplePokemonBot implements PokemonBot
      */
     private List<EvolutionResult> doEvolutions()
     {
-        final Inventories inventories = getApi().getInventories();
-        final CandyJar candyJar = inventories.getCandyjar();
+        try {
+            final Inventories inventories = getApi().getInventories();
+            final CandyJar candyJar = inventories.getCandyjar();
 
-        final List<Pokemon> pokemons = inventories.getPokebank()
-                                            .getPokemons()
-                                            .stream()
-                                            .sorted((Pokemon a, Pokemon b) ->
-                                                Integer.compare(b.getCp(), a.getCp()))
-                                            .collect(Collectors.toList());
+            final List<Pokemon> pokemons = inventories.getPokebank()
+                    .getPokemons()
+                    .stream()
+                    .sorted((Pokemon a, Pokemon b) ->
+                            Integer.compare(b.getCp(), a.getCp()))
+                    .collect(Collectors.toList());
 
-        return PokemonEvolver.evolvePokemon(pokemons, candyJar);
+            return PokemonEvolver.evolvePokemon(pokemons, candyJar);
+        }
+        catch(Exception ex)
+        {
+            LOG.error(ex.getMessage());
+            return new ArrayList<>();
+        }
     }
 
     @Override
     public Inventories getInventory()
     {
-        return getApi().getInventories();
+        try {
+            return getApi().getInventories();
+        }
+        catch(Exception ex) {
+            LOG.error(ex.getMessage(), ex);
+        }
+        return null;
     }
 
     protected synchronized final OpStatus updateOpStatus(OpStatus status)
