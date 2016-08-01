@@ -12,6 +12,7 @@ import java.util.List;
 public class CatchNearbyPokemonActivity implements BotActivity
 {
     private final PokemonBot pokemonBot;
+    private long lastCatchAttemptMs = 0L;
 
     public CatchNearbyPokemonActivity(final PokemonBot bot)
     {
@@ -24,8 +25,19 @@ public class CatchNearbyPokemonActivity implements BotActivity
     }
 
     @Override
-    public void performActivity()
+    public synchronized void performActivity()
     {
-        catchNearbyPokemon();
+        if(getCurrentTimeMillis() - lastCatchAttemptMs > 10000L)
+        {
+            updateLastCatchAttempt();
+            catchNearbyPokemon();
+        }
     }
+
+    private synchronized void updateLastCatchAttempt()
+    {
+        this.lastCatchAttemptMs = getCurrentTimeMillis();
+    }
+
+    private long getCurrentTimeMillis(){ return pokemonBot.getApi().currentTimeMillis(); }
 }

@@ -44,7 +44,7 @@ public class BotStep
 
         for(int i = 0; i < ticks.intValue(); i++)
         {
-            LatLng next = nextStep(prv, getEnd(), stepSize);
+            LatLng next = nextStep(prv, getEnd(), stepSize + getSmallRandom());
             steps.add(next);
             prv = next;
         }
@@ -68,6 +68,11 @@ public class BotStep
 
         Point nextPoint = EarthCalc.pointRadialDistance(current, bearing, stepSize);
         return new LatLng(nextPoint.getLatitude(), nextPoint.getLongitude());
+    }
+
+    public static double getSmallRandom()
+    {
+        return Math.random() * 0.00015 - 0.00007;
     }
 
     public LatLng getStart()

@@ -168,7 +168,7 @@ public class RegularBotWalker implements BotWalker
         {
             setCurrentLocation(destination);
             performHeartBeat();
-            performPostStepActivities();
+            // performPostStepActivities();
             return;
         }
 
@@ -183,15 +183,15 @@ public class RegularBotWalker implements BotWalker
             double speed = setCurrentLocation(step);
             // printSpeed(speed, prv, step);
             // prv = step;
-            performPostStepActivities();
+            // performPostStepActivities();
         }
 
         longSleep();
 
         // TODO: Add randomized delays?
 
-        performHeartBeat();
-        performPostStepActivities();
+        // performHeartBeat();
+        // performPostStepActivities();
     }
 
     /**
@@ -257,6 +257,7 @@ public class RegularBotWalker implements BotWalker
     {
         try
         {
+            Sleeper.shortSleep();
             double speed = 0;
             boolean doUpdate = true;
             LatLng currentLocation = getCurrentLocation();

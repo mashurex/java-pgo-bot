@@ -3,6 +3,7 @@ import com.google.maps.model.LatLng;
 import com.grum.geocalc.DegreeCoordinate;
 import com.grum.geocalc.EarthCalc;
 import com.grum.geocalc.Point;
+import com.pokegoapi.api.gym.Gym;
 
 /**
  * Author: Mustafa Ashurex
@@ -59,5 +60,21 @@ public final class LocationUtil
     public static double getBearing(LatLng origin, LatLng dest)
     {
         return getBearing(convert(origin), convert(dest));
+    }
+
+    /**
+     * Compares the distance from {@code loc} to a pair of Gyms.
+     *
+     * @param loc
+     * @param a
+     * @param b
+     * @return
+     */
+    public static int compare(LatLng loc, Gym a, Gym b)
+    {
+        double distanceA = getDistance(loc, new LatLng(a.getLatitude(), a.getLongitude()));
+        double distanceB = getDistance(loc, new LatLng(b.getLatitude(), b.getLongitude()));
+
+        return Double.compare(distanceA, distanceB);
     }
 }

@@ -3,6 +3,7 @@ import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.LayoutBase;
 import com.ashurex.pokemon.bot.SimplePokemonBot;
+import org.apache.commons.lang3.StringUtils;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -24,6 +25,11 @@ public class PokebotConsoleLoggingLayout extends LayoutBase<ILoggingEvent>
     {
         try
         {
+            if(StringUtils.isEmpty(event.getMessage()))
+            {
+                return "";
+            }
+
             StringBuilder b = new StringBuilder();
             b.append(dateFormatter.format(new Date(event.getTimeStamp())));
             b.append(" ");

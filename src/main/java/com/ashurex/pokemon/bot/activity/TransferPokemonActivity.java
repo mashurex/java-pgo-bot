@@ -2,6 +2,7 @@ package com.ashurex.pokemon.bot.activity;
 import POGOProtos.Enums.PokemonFamilyIdOuterClass.PokemonFamilyId;
 import POGOProtos.Networking.Responses.ReleasePokemonResponseOuterClass.ReleasePokemonResponse.Result;
 import com.ashurex.pokemon.bot.PokemonBot;
+import com.ashurex.pokemon.bot.action.Sleeper;
 import com.pokegoapi.api.pokemon.Pokemon;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,6 +56,7 @@ public class TransferPokemonActivity implements BotActivity
                 {
                     try
                     {
+                        Sleeper.shortSleep();
                         Result r = p.transferPokemon();
                         LOG.info(String.format("Transferred %d %s: %s", p.getCp(), p.getPokemonId(), r));
                         transferred.add(r);
