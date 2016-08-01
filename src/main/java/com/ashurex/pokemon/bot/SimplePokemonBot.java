@@ -128,12 +128,9 @@ public class SimplePokemonBot implements PokemonBot
         LocationListener locationListener = new LoggingLocationListener(bot);
 
         SimpleHeartBeatListener heartBeatListener = new SimpleHeartBeatListener(options.getHeartBeatPace());
-        // FIXME: Disabling this for throttling testing
-        heartBeatListener.addHeartBeatActivity(catchNearbyPokemonActivity);
 
         if(options.isDoTransfers())
         {
-            // FIXME: Disabling this for throttling testing
             heartBeatListener.addHeartBeatActivity(transferPokemonActivity);
         }
 
